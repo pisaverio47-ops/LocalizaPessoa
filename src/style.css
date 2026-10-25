@@ -37,7 +37,7 @@
   --radius-lg: 14px;
   --radius-full: 9999px;
   --header-height: 64px;
-  --sidebar-width: 360px;
+  --sidebar-width: 380px;
 }
 
 /* Reset Universal */
@@ -269,7 +269,7 @@ html, body {
 }
 
 .btn-sm {
-  padding: 4px 10px;
+  padding: 5px 12px;
   font-size: 0.78rem;
 }
 
@@ -281,12 +281,17 @@ html, body {
   display: none;
 }
 
+.hidden {
+  display: none !important;
+}
+
 /* Área de Trabalho */
 .app-workspace {
   display: flex;
   flex: 1;
   position: relative;
   overflow: hidden;
+  height: calc(100vh - var(--header-height));
 }
 
 /* Sidebar Esquerda */
@@ -413,14 +418,25 @@ html, body {
   font-weight: 600;
 }
 
-/* Grid de Telemetria */
+.profile-email-badge {
+  font-size: 0.7rem;
+  color: var(--signal-accent);
+  background-color: rgba(0, 145, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-top: 4px;
+}
+
+/* Grid de Telemetria com 6 parâmetros */
 .telemetry-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   background-color: var(--bg-panel);
-  padding: 8px;
+  padding: 10px;
   border-radius: var(--radius-sm);
+  margin-bottom: 10px;
 }
 
 .telemetry-item {
@@ -437,10 +453,19 @@ html, body {
 }
 
 .telemetry-value {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-family: var(--font-mono);
   font-weight: 600;
   color: var(--text-main);
+  white-space: nowrap;
+}
+
+.telemetry-value.text-xs {
+  font-size: 0.68rem;
+}
+
+.simulation-row {
+  margin-top: 4px;
 }
 
 /* Card do Círculo */
@@ -619,16 +644,19 @@ html, body {
   margin-top: auto;
 }
 
-/* Mapa e Canvas */
+/* Mapa e Canvas com suporte total a Leaflet */
 .map-wrapper {
   flex: 1;
   position: relative;
   height: 100%;
+  width: 100%;
+  min-height: 100%;
 }
 
 .map-canvas {
   width: 100%;
   height: 100%;
+  min-height: 100%;
   background-color: #0b111e;
 }
 
@@ -710,7 +738,7 @@ html, body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Modais */
+/* Modais e Abas de Autenticação */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -723,10 +751,6 @@ html, body {
   align-items: center;
   justify-content: center;
   z-index: 2000;
-}
-
-.modal-overlay.hidden {
-  display: none;
 }
 
 .modal-card {
@@ -758,6 +782,35 @@ html, body {
   font-size: 1.4rem;
   cursor: pointer;
   line-height: 1;
+}
+
+.auth-tabs {
+  display: flex;
+  gap: 4px;
+  background-color: var(--bg-canvas);
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+  border: 1px solid var(--border-subtle);
+}
+
+.auth-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.auth-tab.active {
+  background-color: var(--bg-panel-elevated);
+  color: var(--signal-accent);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
 .modal-desc {
@@ -803,6 +856,7 @@ html, body {
 .helper-text {
   font-size: 0.75rem;
   color: var(--text-tertiary);
+  margin-bottom: 12px;
 }
 
 .modal-footer {
@@ -815,6 +869,7 @@ html, body {
 /* Marcadores Personalizados no Mapa Leaflet */
 .leaflet-container {
   background-color: #0b111e !important;
+  font-family: var(--font-sans) !important;
 }
 
 .custom-marker {

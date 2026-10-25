@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Carrega das variáveis de ambiente ou do localStorage (permitindo configuração direta no app)
+// Carrega das variáveis de ambiente ou do localStorage
 const DEFAULT_URL = import.meta.env.VITE_SUPABASE_URL || 'https://tsrlmvpnautpiubmsjow.supabase.co';
 const DEFAULT_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_kO2S_wWduJqPgf3IJA6N-g_4_BeKWke';
 
@@ -30,6 +30,10 @@ export function getSupabase() {
 
   try {
     supabaseClient = createClient(url, key, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
       realtime: {
         params: {
           eventsPerSecond: 10,
@@ -42,6 +46,102 @@ export function getSupabase() {
     return null;
   }
 }
+
+// ==============================================================================
+// AUTENTICAÇÃO COM SUPABASE AUTH (CADASTRO, LOGIN E TOKEN POR E-MAIL)
+// ==============================================================================
+
+/**
+ * Cria uma nova conta e envia e-mail com token/link de confirmação
+ */
+export async function signUpUser(name, email, password, avatarColor) {
+  const client = getSupabase();
+  if (!client) throw new Error('Cliente Supabase não inicializado.');
+
+  const { data, error } = await client.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        name,
+        avatar_color: avatarColor,
+      },
+    },
+  });
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Confirma o cadastro utilizando o token de 6 dígitos enviado por e-mail
+ */
+export async function verifyEmailOtp(email, token) {
+  const client = getSupabase();
+  if (!client) throw new Error('Cliente Supabase não inicializado.');
+
+  const { data, error } = await client.auth.verifyOtp({
+    email,
+    token,
+    type: 'signup',
+  });
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Realiza login com e-mail e senha
+ */
+export async function signInUser(email, password) {
+  const client = getSupabase();
+  if (!client) throw new Error('Cliente Supabase não inicializado.');
+
+  const { data, error } = await client.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Encerra a sessão
+ */
+export async function signOutUser() {
+  const client = getSupabase();
+  if (!client) return;
+  await client.auth.signOut();
+}
+
+/**
+ * Retorna o usuário logado atual
+ */
+export async function getCurrentUser() {
+  const client = getSupabase();
+  if (!client) return null;
+  const { data } = await client.auth.getUser();
+  return data?.user || null;
+}
+
+/**
+ * Escuta mudanças de autenticação (Login, Logout)
+ */
+export function onAuthStateChange(callback) {
+  const client = getSupabase();
+  if (!client) return () => {};
+
+  const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
+    callback(event, session);
+  });
+
+  return () => subscription.unsubscribe();
+}
+
+// ==============================================================================
+// LOCALIZAÇÃO EM TEMPO REAL E BANCO
+// ==============================================================================
 
 /**
  * Assina atualizações em tempo real das localizações de um círculo
@@ -62,7 +162,7 @@ export function subscribeCircleLocations(circleCode, onLocationUpdate) {
     },
   });
 
-  // 1. Ouvir Broadcast P2P (ultra-rápido, latência de ~50ms)
+  // 1. Ouvir Broadcast P2P (instantâneo)
   channel.on('broadcast', { event: 'location_ping' }, (payload) => {
     if (payload.payload) {
       onLocationUpdate(payload.payload);
@@ -123,6 +223,7 @@ export async function broadcastAndSaveLocation(locationData) {
         accuracy: locationData.accuracy,
         speed: locationData.speed,
         heading: locationData.heading,
+        altitude: locationData.altitude,
         battery_level: locationData.battery_level,
         is_charging: locationData.is_charging,
         status: locationData.status,
@@ -132,7 +233,7 @@ export async function broadcastAndSaveLocation(locationData) {
       });
 
     if (error) {
-      console.warn('Erro ao salvar localização no banco:', error.message);
+      console.warn('Aviso ao salvar localização no banco:', error.message);
     }
 
     // 3. Salvar no histórico periodicamente (a cada 30 segundos)
@@ -224,7 +325,6 @@ export async function triggerAlert(circleCode, userName, type, message, lat, lng
   const client = getSupabase();
   if (!client) return;
 
-  // Broadcast imediato
   if (activeChannel) {
     activeChannel.send({
       type: 'broadcast',
@@ -233,7 +333,6 @@ export async function triggerAlert(circleCode, userName, type, message, lat, lng
     }).catch(console.warn);
   }
 
-  // Grava na tabela de alertas
   return client.from('alerts').insert({
     circle_code: circleCode,
     user_name: userName,

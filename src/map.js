@@ -1,70 +1,106 @@
 import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 let mapInstance = null;
-let currentLayer = 'dark';
+let currentLayer = 'streets'; // Usar OpenStreetMap/Voyager por padrão para garantir visibilidade imediata
 let tileLayer = null;
 
-const markersMap = new Map(); // userId -> { marker, accuracyCircle, trailPolyline }
+const markersMap = new Map(); // userId -> { marker, accuracyCircle, trailPolyline, historyCoords: [] }
 const placesLayers = new Map(); // placeId -> L.circle
 
+// Provedores de mapas testados e estáveis
 const MAP_LAYERS = {
-  dark: {
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap',
-  },
   streets: {
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap',
+    name: 'Ruas & Cidades',
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> colaboradores',
+    maxZoom: 19,
+  },
+  dark: {
+    name: 'Noturno / Tático',
+    url: 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+    attribution: '&copy; CARTO &copy; OpenStreetMap',
+    maxZoom: 19,
   },
   satellite: {
+    name: 'Satélite',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     attribution: 'Tiles &copy; Esri',
+    maxZoom: 19,
   },
 };
 
 /**
- * Inicializa o mapa Leaflet
+ * Inicializa o mapa Leaflet com garantia de renderização
  */
 export function initMap(containerId = 'map', defaultCoords = [-23.5505, -46.6333], zoom = 14) {
   if (mapInstance) return mapInstance;
 
+  const container = document.getElementById(containerId);
+  if (!container) {
+    console.error(`Contêiner do mapa #${containerId} não encontrado.`);
+    return null;
+  }
+
   mapInstance = L.map(containerId, {
     center: defaultCoords,
     zoom: zoom,
-    zoomControl: false, // Nós usamos controles personalizados
+    zoomControl: true, // Habilitar controle de zoom nativo
   });
 
-  // Camada padrão Dark Matter
-  tileLayer = L.tileLayer(MAP_LAYERS.dark.url, {
-    attribution: MAP_LAYERS.dark.attribution,
-    maxZoom: 19,
-    subdomains: 'abcd',
+  // Camada padrão OpenStreetMap (garantia total de carregamento)
+  tileLayer = L.tileLayer(MAP_LAYERS.streets.url, {
+    attribution: MAP_LAYERS.streets.attribution,
+    maxZoom: MAP_LAYERS.streets.maxZoom,
   }).addTo(mapInstance);
+
+  // Forçar o recalculo do tamanho do contêiner para evitar tela cinza
+  setTimeout(() => {
+    mapInstance.invalidateSize();
+  }, 150);
+
+  setTimeout(() => {
+    mapInstance.invalidateSize();
+  }, 600);
+
+  window.addEventListener('resize', () => {
+    if (mapInstance) mapInstance.invalidateSize();
+  });
 
   return mapInstance;
 }
 
 /**
- * Alterna entre temas de mapa (Escuro, Ruas e Satélite)
+ * Alterna entre temas de mapa (Ruas, Escuro e Satélite)
  */
 export function toggleMapLayer() {
-  if (!mapInstance) return;
+  if (!mapInstance) return 'streets';
 
-  if (currentLayer === 'dark') currentLayer = 'streets';
-  else if (currentLayer === 'streets') currentLayer = 'satellite';
-  else currentLayer = 'dark';
+  if (currentLayer === 'streets') currentLayer = 'dark';
+  else if (currentLayer === 'dark') currentLayer = 'satellite';
+  else currentLayer = 'streets';
 
   if (tileLayer) {
     mapInstance.removeLayer(tileLayer);
   }
 
-  tileLayer = L.tileLayer(MAP_LAYERS[currentLayer].url, {
-    attribution: MAP_LAYERS[currentLayer].attribution,
-    maxZoom: 19,
-    subdomains: 'abcd',
+  const selected = MAP_LAYERS[currentLayer];
+  tileLayer = L.tileLayer(selected.url, {
+    attribution: selected.attribution,
+    maxZoom: selected.maxZoom,
   }).addTo(mapInstance);
 
-  return currentLayer;
+  return selected.name;
+}
+
+/**
+ * Converte graus de direção em ponto cardeal
+ */
+function getHeadingCardinal(heading) {
+  if (heading === null || heading === undefined || heading < 0) return 'Indefinido';
+  const directions = ['N', 'NE', 'L', 'SE', 'S', 'SO', 'O', 'NO'];
+  const index = Math.round(heading / 45) % 8;
+  return `${directions[index]} (${Math.round(heading)}°)`;
 }
 
 /**
@@ -73,12 +109,27 @@ export function toggleMapLayer() {
 export function updateMemberMarker(member, isSelf = false) {
   if (!mapInstance) return;
 
-  const { user_id, user_name, latitude, longitude, accuracy, avatar_color, speed, battery_level, status } = member;
-  const latLng = [latitude, longitude];
+  const {
+    user_id,
+    user_name,
+    latitude,
+    longitude,
+    accuracy,
+    avatar_color,
+    speed,
+    heading,
+    altitude,
+    battery_level,
+    status,
+    updated_at,
+  } = member;
 
+  const latLng = [latitude, longitude];
   const firstLetter = (user_name || 'U').charAt(0).toUpperCase();
   const color = avatar_color || (isSelf ? '#0091ff' : '#10b981');
-  const isMoving = (status === 'moving' || speed > 3);
+  const isMoving = status === 'moving' || (speed && speed > 3);
+  const timeStr = updated_at ? new Date(updated_at).toLocaleTimeString('pt-BR') : 'Agora';
+  const headingText = getHeadingCardinal(heading);
 
   // Criação do HTML do marcador com pulso de radar
   const iconHtml = `
@@ -100,15 +151,47 @@ export function updateMemberMarker(member, isSelf = false) {
     iconAnchor: [22, 22],
   });
 
+  const popupContent = `
+    <div style="font-family: inherit; font-size: 13px; color: #0f172a; min-width: 220px; line-height: 1.5;">
+      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 6px;">
+        <strong style="font-size: 15px; color: #0f172a;">${user_name} ${isSelf ? '(Você)' : ''}</strong>
+        <span style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: ${isMoving ? '#dcfce7' : '#f1f5f9'}; color: ${isMoving ? '#15803d' : '#475569'}; font-weight: 600;">
+          ${isMoving ? '🚗 Em Movimento' : '🛑 Parado'}
+        </span>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 6px;">
+        <div>⚡ Velocidade: <b>${speed || 0} km/h</b></div>
+        <div>🔋 Bateria: <b>${battery_level || '--'}%</b></div>
+        <div>🎯 Precisão: <b>±${accuracy || '--'} m</b></div>
+        <div>🧭 Direção: <b>${headingText}</b></div>
+      </div>
+      ${altitude ? `<div>⛰️ Altitude: <b>${Math.round(altitude)} m</b></div>` : ''}
+      <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
+        📍 Coords: <code>${latitude.toFixed(5)}, ${longitude.toFixed(5)}</code>
+      </div>
+      <div style="font-size: 11px; color: #94a3b8;">Último sinal: ${timeStr}</div>
+    </div>
+  `;
+
   if (markersMap.has(user_id)) {
     // Marcador existente: mover suavemente
     const entry = markersMap.get(user_id);
     entry.marker.setIcon(customIcon);
     entry.marker.setLatLng(latLng);
+    entry.marker.setPopupContent(popupContent);
 
     if (entry.accuracyCircle) {
       entry.accuracyCircle.setLatLng(latLng);
       entry.accuracyCircle.setRadius(accuracy || 15);
+    }
+
+    // Traçado do trajeto (Breadcrumb trail)
+    entry.historyCoords.push(latLng);
+    if (entry.historyCoords.length > 50) {
+      entry.historyCoords.shift();
+    }
+    if (entry.trailPolyline) {
+      entry.trailPolyline.setLatLngs(entry.historyCoords);
     }
   } else {
     // Novo marcador
@@ -123,17 +206,23 @@ export function updateMemberMarker(member, isSelf = false) {
       fillOpacity: 0.12,
     }).addTo(mapInstance);
 
-    marker.bindPopup(`
-      <div style="font-family: inherit; font-size: 13px; color: #0f172a; min-width: 140px;">
-        <strong style="display: block; font-size: 14px; margin-bottom: 4px;">${user_name}</strong>
-        <div>Velocidade: <b>${speed || 0} km/h</b></div>
-        <div>Bateria: <b>${battery_level || '--'}%</b></div>
-        <div>Precisão: <b>±${accuracy || '--'} m</b></div>
-        <div style="font-size: 11px; color: #64748b; margin-top: 4px;">${isMoving ? 'Em movimento' : 'Parado'}</div>
-      </div>
-    `);
+    // Linha de rastro do trajeto
+    const historyCoords = [latLng];
+    const trailPolyline = L.polyline(historyCoords, {
+      color: color,
+      weight: 3,
+      opacity: 0.6,
+      dashArray: '4, 8',
+    }).addTo(mapInstance);
 
-    markersMap.set(user_id, { marker, accuracyCircle });
+    marker.bindPopup(popupContent);
+
+    markersMap.set(user_id, {
+      marker,
+      accuracyCircle,
+      trailPolyline,
+      historyCoords,
+    });
   }
 }
 
@@ -142,7 +231,8 @@ export function updateMemberMarker(member, isSelf = false) {
  */
 export function panToLocation(lat, lng, zoom = 16) {
   if (!mapInstance) return;
-  mapInstance.setView([lat, lng], zoom, { animate: true, duration: 1 });
+  mapInstance.setView([lat, lng], zoom, { animate: true, duration: 0.8 });
+  setTimeout(() => mapInstance.invalidateSize(), 100);
 }
 
 /**
@@ -164,7 +254,7 @@ export function fitAllMembers() {
   if (!mapInstance || markersMap.size === 0) return;
 
   const group = new L.featureGroup(Array.from(markersMap.values()).map((e) => e.marker));
-  mapInstance.fitBounds(group.getBounds().pad(0.2), { animate: true });
+  mapInstance.fitBounds(group.getBounds().pad(0.25), { animate: true });
 }
 
 /**
@@ -198,8 +288,8 @@ export function renderPlaces(places) {
 
     circle.bindPopup(`
       <div style="font-family: inherit; font-size: 13px; color: #0f172a;">
-        <strong>Lugar Seguro: ${place.name}</strong>
-        <p style="margin: 4px 0 0; font-size: 11px; color: #64748b;">Raio: ${place.radius_meters}m</p>
+        <strong>📍 Lugar Seguro: ${place.name}</strong>
+        <p style="margin: 4px 0 0; font-size: 11px; color: #64748b;">Raio de detecção: ${place.radius_meters}m</p>
       </div>
     `);
 

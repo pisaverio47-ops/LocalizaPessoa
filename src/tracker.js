@@ -1,5 +1,5 @@
 /**
- * Módulo de Captura de GPS e Sensores do Dispositivo
+ * Módulo de Captura de GPS e Sensores do Dispositivo com Telemetria Rica
  */
 
 let watchId = null;
@@ -7,6 +7,7 @@ let currentPosition = null;
 let batteryInfo = { level: 100, isCharging: false };
 let lastReportTime = 0;
 let lastCoord = null;
+let simulationInterval = null;
 
 // Paleta de cores para avatares dos membros
 const AVATAR_COLORS = [
@@ -26,6 +27,10 @@ export function getUserId() {
     localStorage.setItem('sentinel_user_id', id);
   }
   return id;
+}
+
+export function setCustomUserId(id) {
+  localStorage.setItem('sentinel_user_id', id);
 }
 
 export function getUserName() {
@@ -84,7 +89,7 @@ export function startTracking(onPositionUpdate, onError) {
   const options = {
     enableHighAccuracy: true,
     timeout: 15000,
-    maximumAge: 3000,
+    maximumAge: 2000,
   };
 
   watchId = navigator.geolocation.watchPosition(
@@ -112,9 +117,10 @@ export function startTracking(onPositionUpdate, onError) {
       currentPosition = {
         latitude: coords.latitude,
         longitude: coords.longitude,
-        accuracy: Math.round(coords.accuracy),
+        accuracy: Math.round(coords.accuracy || 10),
         speed: calculatedSpeed,
         heading: coords.heading || 0,
+        altitude: coords.altitude || null,
         battery_level: batteryInfo.level,
         is_charging: batteryInfo.isCharging,
         status,
@@ -126,13 +132,62 @@ export function startTracking(onPositionUpdate, onError) {
       }
     },
     (err) => {
-      console.warn('Erro na geolocalização:', err.message);
+      console.warn('Aviso de geolocalização:', err.message);
       if (onError) onError(err);
     },
     options
   );
 
   return true;
+}
+
+/**
+ * Inicia uma rota simulada para testes no computador ou ambientes internos
+ */
+export function startSimulatedTracking(initialLat, initialLng, onPositionUpdate) {
+  stopTracking();
+  stopSimulatedTracking();
+
+  let lat = initialLat || -23.5505;
+  let lng = initialLng || -46.6333;
+  let step = 0;
+
+  simulationInterval = setInterval(() => {
+    step++;
+    // Movimento suave simulando carro/caminhada
+    lat += Math.sin(step * 0.2) * 0.0003 + 0.0001;
+    lng += Math.cos(step * 0.2) * 0.0003 + 0.0001;
+
+    currentPosition = {
+      latitude: lat,
+      longitude: lng,
+      accuracy: 6,
+      speed: Math.round(20 + Math.sin(step * 0.3) * 15), // 15 a 35 km/h
+      heading: (step * 25) % 360,
+      altitude: 760 + Math.round(Math.sin(step) * 5),
+      battery_level: Math.max(10, batteryInfo.level - Math.floor(step / 30)),
+      is_charging: batteryInfo.isCharging,
+      status: 'moving',
+      timestamp: Date.now(),
+    };
+
+    if (onPositionUpdate) {
+      onPositionUpdate(currentPosition);
+    }
+  }, 2000);
+
+  return true;
+}
+
+export function stopSimulatedTracking() {
+  if (simulationInterval !== null) {
+    clearInterval(simulationInterval);
+    simulationInterval = null;
+  }
+}
+
+export function isSimulating() {
+  return simulationInterval !== null;
 }
 
 /**
@@ -143,10 +198,11 @@ export function stopTracking() {
     navigator.geolocation.clearWatch(watchId);
     watchId = null;
   }
+  stopSimulatedTracking();
 }
 
 export function isTrackingActive() {
-  return watchId !== null;
+  return watchId !== null || simulationInterval !== null;
 }
 
 export function getCurrentPosition() {

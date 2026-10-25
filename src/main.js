@@ -8,10 +8,17 @@ import {
   fetchPlaces,
   createPlace,
   triggerAlert,
+  signUpUser,
+  verifyEmailOtp,
+  signInUser,
+  signOutUser,
+  getCurrentUser,
+  onAuthStateChange,
 } from './supabase.js';
 
 import {
   getUserId,
+  setCustomUserId,
   getUserName,
   setUserName,
   getUserColor,
@@ -19,6 +26,9 @@ import {
   startTracking,
   stopTracking,
   isTrackingActive,
+  startSimulatedTracking,
+  stopSimulatedTracking,
+  isSimulating,
   getCurrentPosition,
   calculateDistanceKm,
 } from './tracker.js';
@@ -34,14 +44,13 @@ import {
   renderPlaces,
 } from './map.js';
 
-// Estado da Aplicação
+// Estado Global
 let currentCircle = localStorage.getItem('sentinel_circle_code') || 'FAMILIA-01';
 let currentCircleName = localStorage.getItem('sentinel_circle_name') || 'Minha Família';
-const myUserId = getUserId();
+let authenticatedUser = null;
 const myColor = getUserColor();
-const membersMap = new Map(); // userId -> locationData
+const membersMap = new Map();
 let placesList = [];
-let simulatedInterval = null;
 
 // Elementos do DOM
 const globalStatusDot = document.getElementById('globalStatusDot');
@@ -57,9 +66,16 @@ const btnEditName = document.getElementById('btnEditName');
 const myAvatarRing = document.getElementById('myAvatarRing');
 const myAvatarLetter = document.getElementById('myAvatarLetter');
 const myTrackingStatus = document.getElementById('myTrackingStatus');
+const userEmailBadge = document.getElementById('userEmailBadge');
+
+// Telemetria Expandida
 const myBatteryValue = document.getElementById('myBatteryValue');
 const mySpeedValue = document.getElementById('mySpeedValue');
 const myAccuracyValue = document.getElementById('myAccuracyValue');
+const myHeadingValue = document.getElementById('myHeadingValue');
+const myAltitudeValue = document.getElementById('myAltitudeValue');
+const myCoordsValue = document.getElementById('myCoordsValue');
+const btnSimulateRoute = document.getElementById('btnSimulateRoute');
 
 const headerCircleBadge = document.getElementById('headerCircleBadge');
 const circleNameDisplay = document.getElementById('circleNameDisplay');
@@ -74,7 +90,31 @@ const btnRecenterMe = document.getElementById('btnRecenterMe');
 const btnToggleLayer = document.getElementById('btnToggleLayer');
 const alertToastContainer = document.getElementById('alertToastContainer');
 
-// Modais
+// Modal de Autenticação
+const btnOpenAuth = document.getElementById('btnOpenAuth');
+const authButtonLabel = document.getElementById('authButtonLabel');
+const modalAuth = document.getElementById('modalAuth');
+const btnCloseAuthModal = document.getElementById('btnCloseAuthModal');
+const tabLogin = document.getElementById('tabLogin');
+const tabRegister = document.getElementById('tabRegister');
+const tabVerify = document.getElementById('tabVerify');
+const formLogin = document.getElementById('formLogin');
+const formRegister = document.getElementById('formRegister');
+const formVerify = document.getElementById('formVerify');
+const panelLoggedIn = document.getElementById('panelLoggedIn');
+const loggedUserDisplay = document.getElementById('loggedUserDisplay');
+const btnLogoutUser = document.getElementById('btnLogoutUser');
+
+// Inputs de Auth
+const loginEmail = document.getElementById('loginEmail');
+const loginPassword = document.getElementById('loginPassword');
+const regName = document.getElementById('regName');
+const regEmail = document.getElementById('regEmail');
+const regPassword = document.getElementById('regPassword');
+const verifyEmail = document.getElementById('verifyEmail');
+const verifyToken = document.getElementById('verifyToken');
+
+// Modal Círculo
 const modalCircle = document.getElementById('modalCircle');
 const inputCircleCode = document.getElementById('inputCircleCode');
 const inputCircleName = document.getElementById('inputCircleName');
@@ -82,6 +122,7 @@ const btnConfirmCircleModal = document.getElementById('btnConfirmCircleModal');
 const btnCancelCircleModal = document.getElementById('btnCancelCircleModal');
 const btnCloseCircleModal = document.getElementById('btnCloseCircleModal');
 
+// Modal Lugar Seguro
 const modalPlace = document.getElementById('modalPlace');
 const btnAddPlaceModal = document.getElementById('btnAddPlaceModal');
 const inputPlaceName = document.getElementById('inputPlaceName');
@@ -90,6 +131,7 @@ const btnSavePlaceModal = document.getElementById('btnSavePlaceModal');
 const btnCancelPlaceModal = document.getElementById('btnCancelPlaceModal');
 const btnClosePlaceModal = document.getElementById('btnClosePlaceModal');
 
+// Modal Configurações
 const modalSettings = document.getElementById('modalSettings');
 const btnOpenSettings = document.getElementById('btnOpenSettings');
 const cfgSupabaseUrl = document.getElementById('cfgSupabaseUrl');
@@ -99,41 +141,40 @@ const btnCancelSettings = document.getElementById('btnCancelSettings');
 const btnCloseSettingsModal = document.getElementById('btnCloseSettingsModal');
 
 // ==============================================================================
-// INICIALIZAÇÃO
+// INICIALIZAÇÃO DA APLICAÇÃO
 // ==============================================================================
 async function initApp() {
-  // 1. Configurar Perfil Local
-  setupLocalProfile();
-
-  // 2. Inicializar Mapa
+  // 1. Inicializar Mapa primeiro para carregar tiles sem delay
   initMap('map');
 
-  // 3. Monitor de Bateria
+  // 2. Configurar perfil e UI
+  setupLocalProfile();
+
+  // 3. Monitor de Bateria nativa
   initBatteryMonitor((battery) => {
     myBatteryValue.textContent = `${battery.level}% ${battery.isCharging ? '⚡' : ''}`;
   });
 
-  // 4. Conectar ao Supabase
+  // 4. Conectar ao Supabase e checar Auth
   await connectToSupabase();
+  await checkAuthStatus();
 
-  // 5. Registrar Eventos de Interface
+  // 5. Registrar eventos de cliques e formulários
   registerEventListeners();
 
-  // 6. Tentar obter localização inicial para centralizar o mapa
+  // 6. Centralização inicial por GPS se autorizado
   if ('geolocation' in navigator) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         panToLocation(pos.coords.latitude, pos.coords.longitude, 15);
       },
-      () => {
-        console.log('Localização inicial padrão mantida.');
-      },
-      { timeout: 5000 }
+      () => {},
+      { timeout: 4000 }
     );
   }
 }
 
-// Configura dados visuais do usuário local
+// Configura dados visuais do perfil
 function setupLocalProfile() {
   const name = getUserName();
   inputMyName.value = name;
@@ -148,7 +189,7 @@ function updateCircleUI() {
   circleCodeDisplay.textContent = currentCircle;
 }
 
-// Conexão com o Supabase e carregamento inicial
+// Conexão com Supabase e carregamento de dados
 async function connectToSupabase() {
   const client = getSupabase();
   if (!client) {
@@ -158,17 +199,42 @@ async function connectToSupabase() {
   }
 
   globalStatusDot.className = 'status-indicator-dot online';
-  globalStatusText.textContent = 'Conectado ao Supabase (Tempo Real)';
+  globalStatusText.textContent = 'Supabase Conectado (WebSockets Ativos)';
 
-  // Carregar dados existentes
   await loadInitialLocations();
   await loadPlaces();
 
-  // Assinar WebSocket em tempo real para este círculo
   subscribeCircleLocations(currentCircle, handleIncomingLocation);
 }
 
-// Carrega as posições já gravadas
+// Verifica status do usuário autenticado
+async function checkAuthStatus() {
+  authenticatedUser = await getCurrentUser();
+  updateAuthUI();
+
+  onAuthStateChange((event, session) => {
+    authenticatedUser = session?.user || null;
+    updateAuthUI();
+  });
+}
+
+function updateAuthUI() {
+  if (authenticatedUser) {
+    const displayName = authenticatedUser.user_metadata?.name || authenticatedUser.email.split('@')[0];
+    authButtonLabel.textContent = displayName;
+    userEmailBadge.textContent = authenticatedUser.email;
+    userEmailBadge.classList.remove('hidden');
+    inputMyName.value = displayName;
+    myAvatarLetter.textContent = displayName.charAt(0).toUpperCase();
+    setUserName(displayName);
+    setCustomUserId(authenticatedUser.id);
+  } else {
+    authButtonLabel.textContent = 'Entrar / Cadastrar';
+    userEmailBadge.classList.add('hidden');
+  }
+}
+
+// Carrega localizações salvas
 async function loadInitialLocations() {
   const locations = await fetchCircleLocations(currentCircle);
   locations.forEach((loc) => {
@@ -176,14 +242,13 @@ async function loadInitialLocations() {
   });
 }
 
-// Carrega os lugares seguros
+// Carrega lugares seguros
 async function loadPlaces() {
   placesList = await fetchPlaces(currentCircle);
   renderPlaces(placesList);
   renderPlacesSidebar();
 }
 
-// Atualiza a lista de lugares na sidebar
 function renderPlacesSidebar() {
   const container = document.getElementById('placesList');
   if (!container) return;
@@ -211,33 +276,41 @@ function renderPlacesSidebar() {
 function handleIncomingLocation(data) {
   if (!data || !data.user_id) return;
 
-  const isSelf = data.user_id === myUserId;
+  const myId = getUserId();
+  const isSelf = data.user_id === myId;
   membersMap.set(data.user_id, data);
 
   // Atualizar marcador no mapa
   updateMemberMarker(data, isSelf);
 
-  // Atualizar lista visual de membros
+  // Atualizar lista lateral
   renderMembersList();
 
-  // Se for o próprio usuário, atualizar telemetria da tela
+  // Atualizar painel de telemetria se for o próprio usuário
   if (isSelf) {
-    mySpeedValue.textContent = `${data.speed || 0} km/h`;
-    myAccuracyValue.textContent = `±${data.accuracy || 0} m`;
-    myBatteryValue.textContent = `${data.battery_level || '--'}% ${data.is_charging ? '⚡' : ''}`;
+    updateTelemetryCard(data);
   }
 }
 
-// Renderiza a lista de membros na barra lateral
+function updateTelemetryCard(data) {
+  mySpeedValue.textContent = `${data.speed || 0} km/h`;
+  myAccuracyValue.textContent = `±${data.accuracy || 0} m`;
+  myBatteryValue.textContent = `${data.battery_level || '--'}% ${data.is_charging ? '⚡' : ''}`;
+  myHeadingValue.textContent = data.heading ? `${Math.round(data.heading)}°` : '--';
+  myAltitudeValue.textContent = data.altitude ? `${Math.round(data.altitude)} m` : '-- m';
+  myCoordsValue.textContent = `${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}`;
+}
+
 function renderMembersList() {
-  const otherMembers = Array.from(membersMap.values()).filter((m) => m.user_id !== myUserId);
+  const myId = getUserId();
+  const otherMembers = Array.from(membersMap.values()).filter((m) => m.user_id !== myId);
   memberCount.textContent = otherMembers.length.toString();
 
   if (otherMembers.length === 0) {
     membersListContainer.innerHTML = `
       <div class="empty-state">
         <p>Nenhum outro membro transmitindo neste círculo.</p>
-        <small>Abra este site em outro celular com o mesmo código para vê-lo aqui.</small>
+        <small>Abra o link em outro celular com o mesmo código para vê-lo no mapa.</small>
       </div>
     `;
     return;
@@ -270,7 +343,6 @@ function renderMembersList() {
     })
     .join('');
 
-  // Adicionar clique para focar no membro
   membersListContainer.querySelectorAll('.member-item').forEach((item) => {
     item.addEventListener('click', () => {
       const uId = item.getAttribute('data-userid');
@@ -280,62 +352,83 @@ function renderMembersList() {
 }
 
 // ==============================================================================
-// TRANSMISSÃO DE LOCALIZAÇÃO DO DISPOSITIVO (GPS)
+// TRANSMISSÃO DE GPS E SIMULAÇÃO DE ROTA
 // ==============================================================================
 function toggleTransmission() {
   if (isTrackingActive()) {
-    // Parar transmissão
     stopTracking();
     btnToggleTransmit.classList.remove('active');
     transmitButtonLabel.textContent = 'Transmitir GPS';
     myTrackingStatus.textContent = 'GPS Desligado';
     myTrackingStatus.classList.remove('live');
+    btnSimulateRoute.textContent = '🚗 Simular Rota de Teste';
     showToast('Transmissão de localização desativada.');
   } else {
-    // Iniciar transmissão de alta precisão
     myTrackingStatus.textContent = 'Buscando satélites GPS...';
     
     const started = startTracking(
       (pos) => {
-        btnToggleTransmit.classList.add('active');
-        transmitButtonLabel.textContent = 'Transmitindo AO VIVO';
-        myTrackingStatus.textContent = 'Transmitindo em Tempo Real';
-        myTrackingStatus.classList.add('live');
-
-        const payload = {
-          circle_code: currentCircle,
-          user_id: myUserId,
-          user_name: getUserName(),
-          avatar_color: myColor,
-          latitude: pos.latitude,
-          longitude: pos.longitude,
-          accuracy: pos.accuracy,
-          speed: pos.speed,
-          heading: pos.heading,
-          battery_level: pos.battery_level,
-          is_charging: pos.is_charging,
-          status: pos.status,
-          updated_at: new Date().toISOString(),
-        };
-
-        // Enviar para Supabase e atualizar localmente
-        broadcastAndSaveLocation(payload);
-        handleIncomingLocation(payload);
-
-        // Checar aproximação de Lugares Seguros
-        checkGeofences(pos.latitude, pos.longitude);
+        onPositionAcquired(pos, false);
       },
       (err) => {
         btnToggleTransmit.classList.remove('active');
         transmitButtonLabel.textContent = 'Transmitir GPS';
         myTrackingStatus.textContent = 'Erro de permissão GPS';
-        showToast(`Permissão de GPS necessária: ${err.message}`, true);
+        showToast(`Permissão de GPS necessária: ${err.message}. Você pode usar a "Simular Rota de Teste" para testar agora!`, true);
       }
     );
 
     if (started) {
-      showToast('Transmissão ativada! Coordenadas enviando ao Supabase.');
+      showToast('Transmissão GPS ativada! Enviando coordenadas ao vivo.');
     }
+  }
+}
+
+function onPositionAcquired(pos, isSimulated = false) {
+  btnToggleTransmit.classList.add('active');
+  transmitButtonLabel.textContent = isSimulated ? 'Simulação AO VIVO' : 'Transmitindo AO VIVO';
+  myTrackingStatus.textContent = isSimulated ? 'Simulando Deslocamento' : 'Transmitindo em Tempo Real';
+  myTrackingStatus.classList.add('live');
+
+  const payload = {
+    circle_code: currentCircle,
+    user_id: getUserId(),
+    user_name: getUserName(),
+    avatar_color: myColor,
+    latitude: pos.latitude,
+    longitude: pos.longitude,
+    accuracy: pos.accuracy,
+    speed: pos.speed,
+    heading: pos.heading,
+    altitude: pos.altitude,
+    battery_level: pos.battery_level,
+    is_charging: pos.is_charging,
+    status: pos.status,
+    updated_at: new Date().toISOString(),
+  };
+
+  broadcastAndSaveLocation(payload);
+  handleIncomingLocation(payload);
+  checkGeofences(pos.latitude, pos.longitude);
+}
+
+// Alternar Simulação de Teste
+function toggleSimulation() {
+  if (isSimulating()) {
+    stopSimulatedTracking();
+    btnToggleTransmit.classList.remove('active');
+    transmitButtonLabel.textContent = 'Transmitir GPS';
+    myTrackingStatus.textContent = 'GPS Desligado';
+    myTrackingStatus.classList.remove('live');
+    btnSimulateRoute.textContent = '🚗 Simular Rota de Teste';
+    showToast('Simulação encerrada.');
+  } else {
+    const center = getMapCenter();
+    startSimulatedTracking(center.lat, center.lng, (pos) => {
+      onPositionAcquired(pos, true);
+    });
+    btnSimulateRoute.textContent = '🛑 Parar Simulação';
+    showToast('Simulação de trajeto iniciada! Veja o marcador se mover no mapa.');
   }
 }
 
@@ -366,6 +459,37 @@ function checkGeofences(lat, lng) {
 }
 
 // ==============================================================================
+// GESTÃO DE AUTENTICAÇÃO COM O SUPABASE (CADASTRO, LOGIN E TOKEN OTP)
+// ==============================================================================
+function switchAuthTab(tab) {
+  tabLogin.classList.remove('active');
+  tabRegister.classList.remove('active');
+  tabVerify.classList.remove('active');
+
+  formLogin.classList.add('hidden');
+  formRegister.classList.add('hidden');
+  formVerify.classList.add('hidden');
+  panelLoggedIn.classList.add('hidden');
+
+  if (authenticatedUser) {
+    panelLoggedIn.classList.remove('hidden');
+    loggedUserDisplay.textContent = authenticatedUser.email;
+    return;
+  }
+
+  if (tab === 'login') {
+    tabLogin.classList.add('active');
+    formLogin.classList.remove('hidden');
+  } else if (tab === 'register') {
+    tabRegister.classList.add('active');
+    formRegister.classList.remove('hidden');
+  } else if (tab === 'verify') {
+    tabVerify.classList.add('active');
+    formVerify.classList.remove('hidden');
+  }
+}
+
+// ==============================================================================
 // ALERTAS E TOASTS
 // ==============================================================================
 function showToast(message, isDanger = false) {
@@ -381,10 +505,9 @@ function showToast(message, isDanger = false) {
 
   setTimeout(() => {
     if (toast.parentElement) toast.remove();
-  }, 5000);
+  }, 6000);
 }
 
-// Disparar Alerta SOS
 function handleSosClick() {
   const confirmSos = confirm('Você deseja disparar um ALERTA DE EMERGÊNCIA SOS para todos os membros deste círculo?');
   if (!confirmSos) return;
@@ -404,7 +527,6 @@ function handleSosClick() {
 
   showToast(`🚨 ALERTA SOS ENVIADO PARA O CÍRCULO ${currentCircle}!`, true);
 
-  // Som de alerta via Web Audio API
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const osc = ctx.createOscillator();
@@ -423,18 +545,14 @@ function handleSosClick() {
 // EVENT LISTENERS E CONTROLES
 // ==============================================================================
 function registerEventListeners() {
-  // Transmitir GPS
   btnToggleTransmit.addEventListener('click', toggleTransmission);
-
-  // Botão SOS
+  btnSimulateRoute.addEventListener('click', toggleSimulation);
   btnSosAlert.addEventListener('click', handleSosClick);
 
-  // Menu Mobile Drawer
   btnToggleSidebar.addEventListener('click', () => {
     sidebarPanel.classList.toggle('open');
   });
 
-  // Salvar Nome do Usuário
   btnEditName.addEventListener('click', () => {
     const newName = inputMyName.value.trim();
     if (newName) {
@@ -444,35 +562,98 @@ function registerEventListeners() {
     }
   });
 
-  // Copiar Código do Círculo
   btnCopyCircleCode.addEventListener('click', () => {
     navigator.clipboard.writeText(currentCircle);
     showToast(`Código ${currentCircle} copiado para a área de transferência!`);
   });
 
-  // Alternar Camadas do Mapa
   btnToggleLayer.addEventListener('click', () => {
-    const layer = toggleMapLayer();
-    showToast(`Estilo de mapa alterado: ${layer.toUpperCase()}`);
+    const layerName = toggleMapLayer();
+    showToast(`Estilo de mapa: ${layerName}`);
   });
 
-  // Centralizar na Minha Posição
   btnRecenterMe.addEventListener('click', () => {
     const pos = getCurrentPosition();
     if (pos) {
       panToLocation(pos.latitude, pos.longitude, 16);
-    } else {
-      if ('geolocation' in navigator) {
-        navigator.geolocation.getCurrentPosition((p) => {
-          panToLocation(p.coords.latitude, p.coords.longitude, 16);
-        });
-      }
+    } else if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition((p) => {
+        panToLocation(p.coords.latitude, p.coords.longitude, 16);
+      });
     }
   });
 
-  // Ver todos os membros no mapa
   btnFitBounds.addEventListener('click', () => {
     fitAllMembers();
+  });
+
+  // Autenticação Modal
+  btnOpenAuth.addEventListener('click', () => {
+    switchAuthTab('login');
+    modalAuth.classList.remove('hidden');
+  });
+
+  btnCloseAuthModal.addEventListener('click', () => modalAuth.classList.add('hidden'));
+
+  tabLogin.addEventListener('click', () => switchAuthTab('login'));
+  tabRegister.addEventListener('click', () => switchAuthTab('register'));
+  tabVerify.addEventListener('click', () => switchAuthTab('verify'));
+
+  // Form: Login
+  formLogin.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = loginEmail.value.trim();
+    const password = loginPassword.value;
+
+    try {
+      showToast('Entrando...');
+      await signInUser(email, password);
+      modalAuth.classList.add('hidden');
+      showToast('Login realizado com sucesso!');
+    } catch (err) {
+      alert(`Erro no login: ${err.message}`);
+    }
+  });
+
+  // Form: Cadastro
+  formRegister.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = regName.value.trim();
+    const email = regEmail.value.trim();
+    const password = regPassword.value;
+
+    try {
+      showToast('Cadastrando e enviando e-mail de confirmação...');
+      await signUpUser(name, email, password, myColor);
+      verifyEmail.value = email;
+      switchAuthTab('verify');
+      showToast('Conta criada! Verifique o token enviado para o seu e-mail.');
+    } catch (err) {
+      alert(`Erro no cadastro: ${err.message}`);
+    }
+  });
+
+  // Form: Verificação de Token OTP
+  formVerify.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = verifyEmail.value.trim();
+    const token = verifyToken.value.trim();
+
+    try {
+      showToast('Validando token...');
+      await verifyEmailOtp(email, token);
+      modalAuth.classList.add('hidden');
+      showToast('E-mail e conta confirmados com sucesso!');
+    } catch (err) {
+      alert(`Token inválido ou expirado: ${err.message}`);
+    }
+  });
+
+  // Logout
+  btnLogoutUser.addEventListener('click', async () => {
+    await signOutUser();
+    modalAuth.classList.add('hidden');
+    showToast('Você saiu da sua conta.');
   });
 
   // Modal: Trocar Círculo
@@ -490,7 +671,7 @@ function registerEventListeners() {
     const newName = inputCircleName.value.trim() || 'Minha Família';
 
     if (!newCode) {
-      alert('Por favor, informe um código para o círculo.');
+      alert('Informe um código para o círculo.');
       return;
     }
 
@@ -561,5 +742,4 @@ function registerEventListeners() {
   });
 }
 
-// Inicia aplicação quando o DOM estiver pronto
 document.addEventListener('DOMContentLoaded', initApp);
