@@ -50,14 +50,11 @@
           <span id="authButtonLabel">Entrar / Cadastrar</span>
         </button>
 
-        <!-- Transmit location toggle button -->
-        <button id="btnToggleTransmit" class="btn btn-transmit" title="Ativar compartilhamento do GPS deste aparelho">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2a10 10 0 0 1 10 10c0 5.25-10 10-10 10S2 17.25 2 12a10 10 0 0 1 10-10z"/>
-            <circle cx="12" cy="12" r="3"/>
-          </svg>
-          <span id="transmitButtonLabel">Transmitir GPS</span>
-        </button>
+        <!-- Always-On Transmission Status Pill -->
+        <div class="live-gps-badge" id="liveGpsBadge" title="Transmissão contínua em tempo real ativada (estilo Life360)">
+          <span class="live-dot-ping"></span>
+          <span id="liveGpsText">GPS Transmitindo Ao Vivo</span>
+        </div>
 
         <!-- SOS Emergency button -->
         <button id="btnSosAlert" class="btn btn-danger" title="Enviar alerta de emergência imediato para todos">

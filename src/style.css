@@ -233,17 +233,34 @@ html, body {
   background-color: var(--signal-whatsapp);
 }
 
-.btn-transmit {
-  background-color: var(--bg-panel-elevated);
-  border-color: var(--border-medium);
-  color: var(--text-main);
+.live-gps-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background-color: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: var(--radius-full);
+  color: #34d399;
+  font-size: 0.8rem;
+  font-weight: 600;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
+  user-select: none;
 }
 
-.btn-transmit.active {
+.live-dot-ping {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
   background-color: var(--signal-live);
-  color: #052e16;
-  border-color: #059669;
-  box-shadow: 0 0 12px var(--signal-live-glow);
+  box-shadow: 0 0 8px var(--signal-live);
+  animation: livePing 2s infinite ease-out;
+}
+
+@keyframes livePing {
+  0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }
 
 .btn-danger {

@@ -58,8 +58,8 @@ let placesList = [];
 // Elementos do DOM
 const globalStatusDot = document.getElementById('globalStatusDot');
 const globalStatusText = document.getElementById('globalStatusText');
-const btnToggleTransmit = document.getElementById('btnToggleTransmit');
-const transmitButtonLabel = document.getElementById('transmitButtonLabel');
+const liveGpsBadge = document.getElementById('liveGpsBadge');
+const liveGpsText = document.getElementById('liveGpsText');
 const btnSosAlert = document.getElementById('btnSosAlert');
 const btnToggleSidebar = document.getElementById('btnToggleSidebar');
 const sidebarPanel = document.getElementById('sidebarPanel');
@@ -169,6 +169,9 @@ async function initApp() {
 
   // Checar se há código de convite na URL (?join=FAM-1234)
   checkUrlInvite();
+
+  // Iniciar transmissão automática contínua (Always-On estilo Life360)
+  startContinuousTransmission();
 
   if ('geolocation' in navigator) {
     navigator.geolocation.getCurrentPosition(
@@ -362,43 +365,33 @@ function renderMembersList() {
 }
 
 // ==============================================================================
-// TRANSMISSÃO DE GPS E SIMULAÇÃO DE ROTA
+// TRANSMISSÃO CONTÍNUA PERMANENTE (ALWAYS-ON ESTILO LIFE360)
 // ==============================================================================
-function toggleTransmission() {
-  if (isTrackingActive()) {
-    stopTracking();
-    btnToggleTransmit.classList.remove('active');
-    transmitButtonLabel.textContent = 'Transmitir GPS';
-    myTrackingStatus.textContent = 'GPS Desligado';
-    myTrackingStatus.classList.remove('live');
-    btnSimulateRoute.textContent = '🚗 Simular Rota de Teste';
-    showToast('Transmissão de localização desativada.');
-  } else {
-    myTrackingStatus.textContent = 'Buscando satélites GPS...';
-    
-    const started = startTracking(
-      (pos) => {
-        onPositionAcquired(pos, false);
-      },
-      (err) => {
-        btnToggleTransmit.classList.remove('active');
-        transmitButtonLabel.textContent = 'Transmitir GPS';
-        myTrackingStatus.textContent = 'Erro de permissão GPS';
-        showToast(`Permissão de GPS necessária: ${err.message}. Use o botão de simulação para testar no PC!`, true);
-      }
-    );
+function startContinuousTransmission() {
+  if (isTrackingActive() && !isSimulating()) return;
+  myTrackingStatus.textContent = 'Conectando ao satélite GPS...';
 
-    if (started) {
-      showToast('Transmissão ativada! Coordenadas enviando para a família.');
+  startTracking(
+    (pos) => {
+      onPositionAcquired(pos, false);
+      myTrackingStatus.textContent = 'GPS Transmitindo em Tempo Real';
+      myTrackingStatus.classList.add('live');
+      if (liveGpsText) liveGpsText.textContent = 'GPS Transmitindo Ao Vivo';
+    },
+    (err) => {
+      console.warn('Aviso de GPS:', err.message);
+      myTrackingStatus.textContent = 'Aguardando permissão de GPS...';
+      if (liveGpsText) liveGpsText.textContent = 'Permissão GPS Necessária';
     }
-  }
+  );
 }
 
 function onPositionAcquired(pos, isSimulated = false) {
-  btnToggleTransmit.classList.add('active');
-  transmitButtonLabel.textContent = isSimulated ? 'Simulação AO VIVO' : 'Transmitindo AO VIVO';
-  myTrackingStatus.textContent = isSimulated ? 'Simulando Deslocamento' : 'Transmitindo em Tempo Real';
+  myTrackingStatus.textContent = isSimulated ? 'Simulando Deslocamento' : 'GPS Transmitindo em Tempo Real';
   myTrackingStatus.classList.add('live');
+  if (liveGpsText) {
+    liveGpsText.textContent = isSimulated ? 'Simulação de Rota Ao Vivo' : 'GPS Transmitindo Ao Vivo';
+  }
 
   const payload = {
     circle_code: currentCircle,
@@ -425,12 +418,9 @@ function onPositionAcquired(pos, isSimulated = false) {
 function toggleSimulation() {
   if (isSimulating()) {
     stopSimulatedTracking();
-    btnToggleTransmit.classList.remove('active');
-    transmitButtonLabel.textContent = 'Transmitir GPS';
-    myTrackingStatus.textContent = 'GPS Desligado';
-    myTrackingStatus.classList.remove('live');
     btnSimulateRoute.textContent = '🚗 Simular Rota de Teste';
-    showToast('Simulação encerrada.');
+    showToast('Simulação encerrada. Retornando ao GPS nativo.');
+    startContinuousTransmission();
   } else {
     const center = getMapCenter();
     startSimulatedTracking(center.lat, center.lng, (pos) => {
@@ -634,9 +624,14 @@ function handleSosClick() {
 // EVENT LISTENERS E CONTROLES
 // ==============================================================================
 function registerEventListeners() {
-  btnToggleTransmit.addEventListener('click', toggleTransmission);
   btnSimulateRoute.addEventListener('click', toggleSimulation);
   btnSosAlert.addEventListener('click', handleSosClick);
+
+  // Garantir que a transmissão continue ativa quando voltar à janela
+  window.addEventListener('focus', startContinuousTransmission);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) startContinuousTransmission();
+  });
 
   btnToggleSidebar.addEventListener('click', () => {
     sidebarPanel.classList.toggle('open');
