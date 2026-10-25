@@ -54,15 +54,36 @@ let authenticatedUser = null;
 const myColor = getUserColor();
 const membersMap = new Map();
 let placesList = [];
+let mapInitialized = false;
 
-// Elementos do DOM
-const globalStatusDot = document.getElementById('globalStatusDot');
-const globalStatusText = document.getElementById('globalStatusText');
+// Elementos da Tela de Bloqueio (Auth Gate)
+const authGate = document.getElementById('authGate');
+const gateTabLogin = document.getElementById('gateTabLogin');
+const gateTabRegister = document.getElementById('gateTabRegister');
+const gateTabVerify = document.getElementById('gateTabVerify');
+const gateFormLogin = document.getElementById('gateFormLogin');
+const gateFormRegister = document.getElementById('gateFormRegister');
+const gateFormVerify = document.getElementById('gateFormVerify');
+const gateLoginEmail = document.getElementById('gateLoginEmail');
+const gateLoginPassword = document.getElementById('gateLoginPassword');
+const gateRegName = document.getElementById('gateRegName');
+const gateRegEmail = document.getElementById('gateRegEmail');
+const gateRegPassword = document.getElementById('gateRegPassword');
+const gateVerifyEmail = document.getElementById('gateVerifyEmail');
+const gateVerifyToken = document.getElementById('gateVerifyToken');
+
+// Elementos da Aplicação Principal
+const appMain = document.getElementById('app');
 const liveGpsBadge = document.getElementById('liveGpsBadge');
 const liveGpsText = document.getElementById('liveGpsText');
 const btnSosAlert = document.getElementById('btnSosAlert');
-const btnToggleSidebar = document.getElementById('btnToggleSidebar');
+const btnUserMenu = document.getElementById('btnUserMenu');
+const userInitialBadge = document.getElementById('userInitialBadge');
+
+// Sidebar e Bottom Sheet
 const sidebarPanel = document.getElementById('sidebarPanel');
+const bottomSheetHandle = document.getElementById('bottomSheetHandle');
+const sheetQuickStatus = document.getElementById('sheetQuickStatus');
 
 const inputMyName = document.getElementById('inputMyName');
 const btnEditName = document.getElementById('btnEditName');
@@ -110,29 +131,13 @@ const inputCircleCode = document.getElementById('inputCircleCode');
 const btnActionJoinFamily = document.getElementById('btnActionJoinFamily');
 const myFamiliesList = document.getElementById('myFamiliesList');
 
-// Modal de Autenticação
-const btnOpenAuth = document.getElementById('btnOpenAuth');
-const authButtonLabel = document.getElementById('authButtonLabel');
-const modalAuth = document.getElementById('modalAuth');
-const btnCloseAuthModal = document.getElementById('btnCloseAuthModal');
-const tabLogin = document.getElementById('tabLogin');
-const tabRegister = document.getElementById('tabRegister');
-const tabVerify = document.getElementById('tabVerify');
-const formLogin = document.getElementById('formLogin');
-const formRegister = document.getElementById('formRegister');
-const formVerify = document.getElementById('formVerify');
-const panelLoggedIn = document.getElementById('panelLoggedIn');
-const loggedUserDisplay = document.getElementById('loggedUserDisplay');
-const btnLogoutUser = document.getElementById('btnLogoutUser');
-
-// Inputs de Auth
-const loginEmail = document.getElementById('loginEmail');
-const loginPassword = document.getElementById('loginPassword');
-const regName = document.getElementById('regName');
-const regEmail = document.getElementById('regEmail');
-const regPassword = document.getElementById('regPassword');
-const verifyEmail = document.getElementById('verifyEmail');
-const verifyToken = document.getElementById('verifyToken');
+// Modal Menu do Usuário
+const modalUserMenu = document.getElementById('modalUserMenu');
+const btnCloseUserMenuModal = document.getElementById('btnCloseUserMenuModal');
+const userMenuAvatar = document.getElementById('userMenuAvatar');
+const userMenuName = document.getElementById('userMenuName');
+const userMenuEmail = document.getElementById('userMenuEmail');
+const btnActionLogout = document.getElementById('btnActionLogout');
 
 // Modal Lugar Seguro
 const modalPlace = document.getElementById('modalPlace');
@@ -153,26 +158,73 @@ const btnCancelSettings = document.getElementById('btnCancelSettings');
 const btnCloseSettingsModal = document.getElementById('btnCloseSettingsModal');
 
 // ==============================================================================
-// INICIALIZAÇÃO
+// INICIALIZAÇÃO DA APLICAÇÃO
 // ==============================================================================
 async function initApp() {
-  initMap('map');
-  setupLocalProfile();
+  registerAuthGateEvents();
+  registerEventListeners();
 
+  // Monitor de Bateria
   initBatteryMonitor((battery) => {
     myBatteryValue.textContent = `${battery.level}% ${battery.isCharging ? '⚡' : ''}`;
   });
 
-  await connectToSupabase();
-  await checkAuthStatus();
-  registerEventListeners();
+  // Checar se o usuário já tem sessão ativa no Supabase
+  await checkSessionAndLock();
 
-  // Checar se há código de convite na URL (?join=FAM-1234)
+  // Escutar eventos de login/logout em tempo real
+  onAuthStateChange(async (event, session) => {
+    if (session?.user) {
+      authenticatedUser = session.user;
+      unlockAppForUser();
+    } else {
+      authenticatedUser = null;
+      lockApp();
+    }
+  });
+
+  // Checar código de convite na URL (?join=FAM-1234)
   checkUrlInvite();
+}
 
-  // Iniciar transmissão automática contínua (Always-On estilo Life360)
+/**
+ * Bloqueia o aplicativo exigindo autenticação
+ */
+async function checkSessionAndLock() {
+  authenticatedUser = await getCurrentUser();
+  if (authenticatedUser) {
+    unlockAppForUser();
+  } else {
+    lockApp();
+  }
+}
+
+function lockApp() {
+  stopTracking();
+  authGate.classList.remove('hidden');
+  appMain.classList.add('hidden');
+}
+
+async function unlockAppForUser() {
+  authGate.classList.add('hidden');
+  appMain.classList.remove('hidden');
+
+  setupUserProfile();
+  updateCircleUI();
+
+  // Inicializar o mapa apenas após o login e visibilidade do DOM
+  if (!mapInitialized) {
+    initMap('map');
+    mapInitialized = true;
+  }
+
+  // Conectar dados da família no Supabase
+  await connectToSupabase();
+
+  // Transmissão de GPS Always-On
   startContinuousTransmission();
 
+  // Centralização inicial no mapa
   if ('geolocation' in navigator) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -184,30 +236,46 @@ async function initApp() {
   }
 }
 
-function setupLocalProfile() {
-  const name = getUserName();
-  inputMyName.value = name;
-  myAvatarLetter.textContent = name.charAt(0).toUpperCase();
+function setupUserProfile() {
+  if (!authenticatedUser) return;
+
+  const displayName = authenticatedUser.user_metadata?.name || authenticatedUser.email.split('@')[0];
+  const email = authenticatedUser.email;
+  const initial = displayName.charAt(0).toUpperCase();
+
+  setUserName(displayName);
+  setCustomUserId(authenticatedUser.id);
+
+  inputMyName.value = displayName;
+  myAvatarLetter.textContent = initial;
+  userInitialBadge.textContent = initial;
+  userEmailBadge.textContent = email;
+
   myAvatarRing.style.background = `linear-gradient(135deg, ${myColor}, #0284c7)`;
-  updateCircleUI();
+
+  userMenuAvatar.style.background = `linear-gradient(135deg, ${myColor}, #0284c7)`;
+  userMenuAvatar.querySelector('span').textContent = initial;
+  userMenuName.textContent = displayName;
+  userMenuEmail.textContent = email;
 }
 
 function updateCircleUI() {
   headerCircleBadge.textContent = `${currentCircleName} ▾`;
   circleNameDisplay.textContent = currentCircleName;
   circleCodeDisplay.textContent = currentCircle;
+  updateSheetQuickInfo();
+}
+
+function updateSheetQuickInfo() {
+  if (sheetQuickStatus) {
+    const count = membersMap.size;
+    sheetQuickStatus.textContent = `${currentCircleName} • ${count} ${count === 1 ? 'membro' : 'membros'}`;
+  }
 }
 
 async function connectToSupabase() {
   const client = getSupabase();
-  if (!client) {
-    globalStatusDot.className = 'status-indicator-dot offline';
-    globalStatusText.textContent = 'Configuração do Supabase pendente';
-    return;
-  }
-
-  globalStatusDot.className = 'status-indicator-dot online';
-  globalStatusText.textContent = 'Supabase Conectado (Tempo Real Ativo)';
+  if (!client) return;
 
   await loadInitialLocations();
   await loadPlaces();
@@ -215,41 +283,15 @@ async function connectToSupabase() {
   subscribeCircleLocations(currentCircle, handleIncomingLocation);
 }
 
-async function checkAuthStatus() {
-  authenticatedUser = await getCurrentUser();
-  updateAuthUI();
-
-  onAuthStateChange((event, session) => {
-    authenticatedUser = session?.user || null;
-    updateAuthUI();
-  });
-}
-
-function updateAuthUI() {
-  if (authenticatedUser) {
-    const displayName = authenticatedUser.user_metadata?.name || authenticatedUser.email.split('@')[0];
-    authButtonLabel.textContent = displayName;
-    userEmailBadge.textContent = authenticatedUser.email;
-    userEmailBadge.classList.remove('hidden');
-    inputMyName.value = displayName;
-    myAvatarLetter.textContent = displayName.charAt(0).toUpperCase();
-    setUserName(displayName);
-    setCustomUserId(authenticatedUser.id);
-  } else {
-    authButtonLabel.textContent = 'Entrar / Cadastrar';
-    userEmailBadge.classList.add('hidden');
-  }
-}
-
-// Verifica se foi aberto com link de convite: ex ?join=FAM-7892
 function checkUrlInvite() {
   const params = new URLSearchParams(window.location.search);
   const invite = params.get('join') || params.get('code');
   if (invite) {
     inputCircleCode.value = invite.toUpperCase();
-    switchFamilyTab('join');
-    modalCircle.classList.remove('hidden');
-    showToast(`Convite para a família ${invite.toUpperCase()} detectado! Clique em "Entrar na Família".`);
+    if (authenticatedUser) {
+      switchFamilyTab('join');
+      modalCircle.classList.remove('hidden');
+    }
   }
 }
 
@@ -299,6 +341,7 @@ function handleIncomingLocation(data) {
 
   updateMemberMarker(data, isSelf);
   renderMembersList();
+  updateSheetQuickInfo();
 
   if (isSelf) {
     updateTelemetryCard(data);
@@ -360,6 +403,10 @@ function renderMembersList() {
     item.addEventListener('click', () => {
       const uId = item.getAttribute('data-userid');
       focusMember(uId);
+      // No celular, fecha o bottom sheet para mostrar o membro no mapa
+      if (window.innerWidth <= 768) {
+        sidebarPanel.classList.remove('expanded');
+      }
     });
   });
 }
@@ -368,6 +415,7 @@ function renderMembersList() {
 // TRANSMISSÃO CONTÍNUA PERMANENTE (ALWAYS-ON ESTILO LIFE360)
 // ==============================================================================
 function startContinuousTransmission() {
+  if (!authenticatedUser) return;
   if (isTrackingActive() && !isSimulating()) return;
   myTrackingStatus.textContent = 'Conectando ao satélite GPS...';
 
@@ -376,12 +424,12 @@ function startContinuousTransmission() {
       onPositionAcquired(pos, false);
       myTrackingStatus.textContent = 'GPS Transmitindo em Tempo Real';
       myTrackingStatus.classList.add('live');
-      if (liveGpsText) liveGpsText.textContent = 'GPS Transmitindo Ao Vivo';
+      if (liveGpsText) liveGpsText.textContent = 'GPS Ao Vivo';
     },
     (err) => {
       console.warn('Aviso de GPS:', err.message);
-      myTrackingStatus.textContent = 'Aguardando permissão de GPS...';
-      if (liveGpsText) liveGpsText.textContent = 'Permissão GPS Necessária';
+      myTrackingStatus.textContent = 'Permissão GPS necessária';
+      if (liveGpsText) liveGpsText.textContent = 'Aguardando GPS';
     }
   );
 }
@@ -390,7 +438,7 @@ function onPositionAcquired(pos, isSimulated = false) {
   myTrackingStatus.textContent = isSimulated ? 'Simulando Deslocamento' : 'GPS Transmitindo em Tempo Real';
   myTrackingStatus.classList.add('live');
   if (liveGpsText) {
-    liveGpsText.textContent = isSimulated ? 'Simulação de Rota Ao Vivo' : 'GPS Transmitindo Ao Vivo';
+    liveGpsText.textContent = isSimulated ? 'Simulação Ao Vivo' : 'GPS Ao Vivo';
   }
 
   const payload = {
@@ -418,8 +466,8 @@ function onPositionAcquired(pos, isSimulated = false) {
 function toggleSimulation() {
   if (isSimulating()) {
     stopSimulatedTracking();
-    btnSimulateRoute.textContent = '🚗 Simular Rota de Teste';
-    showToast('Simulação encerrada. Retornando ao GPS nativo.');
+    btnSimulateRoute.textContent = '🚗 Simular Rota de Teste (PC)';
+    showToast('Simulação encerrada. Retornando ao GPS.');
     startContinuousTransmission();
   } else {
     const center = getMapCenter();
@@ -427,7 +475,7 @@ function toggleSimulation() {
       onPositionAcquired(pos, true);
     });
     btnSimulateRoute.textContent = '🛑 Parar Simulação';
-    showToast('Simulação de trajeto iniciada! Veja seu marcador se mover.');
+    showToast('Simulação de trajeto iniciada no mapa!');
   }
 }
 
@@ -457,7 +505,7 @@ function checkGeofences(lat, lng) {
 }
 
 // ==============================================================================
-// GESTÃO DE FAMÍLIAS (ABAS, CRIAÇÃO E CONVITES)
+// GESTÃO DE FAMÍLIAS
 // ==============================================================================
 function switchFamilyTab(tab) {
   tabCreateFamily.classList.remove('active');
@@ -529,43 +577,89 @@ async function switchActiveCircle(newCode, newName) {
   showToast(`Conectado à família "${newName}" (${newCode})!`);
 }
 
-// Compartilhar convite no WhatsApp
 function shareInviteWhatsApp() {
   const inviteUrl = `${window.location.origin}${window.location.pathname}?join=${currentCircle}`;
-  const message = `Olá! Estou compartilhando minha localização com você no Sentinel. Entre na minha família usando o código *${currentCircle}* ou acesse diretamente pelo link: ${inviteUrl}`;
+  const message = `Olá! Estou compartilhando minha localização com você no Sentinel. Entre na minha família usando o código *${currentCircle}* ou acesse pelo link: ${inviteUrl}`;
   const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
   window.open(waUrl, '_blank');
 }
 
 // ==============================================================================
-// GESTÃO DE AUTENTICAÇÃO
+// AUTH GATEWAY (LOGIN, CADASTRO E TOKEN OBRIGATÓRIOS)
 // ==============================================================================
-function switchAuthTab(tab) {
-  tabLogin.classList.remove('active');
-  tabRegister.classList.remove('active');
-  tabVerify.classList.remove('active');
+function switchGateTab(tab) {
+  gateTabLogin.classList.remove('active');
+  gateTabRegister.classList.remove('active');
+  gateTabVerify.classList.remove('active');
 
-  formLogin.classList.add('hidden');
-  formRegister.classList.add('hidden');
-  formVerify.classList.add('hidden');
-  panelLoggedIn.classList.add('hidden');
-
-  if (authenticatedUser) {
-    panelLoggedIn.classList.remove('hidden');
-    loggedUserDisplay.textContent = authenticatedUser.email;
-    return;
-  }
+  gateFormLogin.classList.add('hidden');
+  gateFormRegister.classList.add('hidden');
+  gateFormVerify.classList.add('hidden');
 
   if (tab === 'login') {
-    tabLogin.classList.add('active');
-    formLogin.classList.remove('hidden');
+    gateTabLogin.classList.add('active');
+    gateFormLogin.classList.remove('hidden');
   } else if (tab === 'register') {
-    tabRegister.classList.add('active');
-    formRegister.classList.remove('hidden');
+    gateTabRegister.classList.add('active');
+    gateFormRegister.classList.remove('hidden');
   } else if (tab === 'verify') {
-    tabVerify.classList.add('active');
-    formVerify.classList.remove('hidden');
+    gateTabVerify.classList.add('active');
+    gateFormVerify.classList.remove('hidden');
   }
+}
+
+function registerAuthGateEvents() {
+  gateTabLogin.addEventListener('click', () => switchGateTab('login'));
+  gateTabRegister.addEventListener('click', () => switchGateTab('register'));
+  gateTabVerify.addEventListener('click', () => switchGateTab('verify'));
+
+  // Submit Login
+  gateFormLogin.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = gateLoginEmail.value.trim();
+    const password = gateLoginPassword.value;
+
+    try {
+      showToast('Autenticando...');
+      await signInUser(email, password);
+      showToast('Login realizado com sucesso!');
+    } catch (err) {
+      alert(`Falha no login: ${err.message}`);
+    }
+  });
+
+  // Submit Cadastro
+  gateFormRegister.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = gateRegName.value.trim();
+    const email = gateRegEmail.value.trim();
+    const password = gateRegPassword.value;
+
+    try {
+      showToast('Criando conta e enviando e-mail...');
+      await signUpUser(name, email, password, myColor);
+      gateVerifyEmail.value = email;
+      switchGateTab('verify');
+      showToast('Conta criada! Verifique o token recebido no seu e-mail.');
+    } catch (err) {
+      alert(`Erro no cadastro: ${err.message}`);
+    }
+  });
+
+  // Submit Confirmação de Token
+  gateFormVerify.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = gateVerifyEmail.value.trim();
+    const token = gateVerifyToken.value.trim();
+
+    try {
+      showToast('Validando token...');
+      await verifyEmailOtp(email, token);
+      showToast('E-mail verificado! Acesso liberado.');
+    } catch (err) {
+      alert(`Token inválido: ${err.message}`);
+    }
+  });
 }
 
 // ==============================================================================
@@ -627,14 +721,15 @@ function registerEventListeners() {
   btnSimulateRoute.addEventListener('click', toggleSimulation);
   btnSosAlert.addEventListener('click', handleSosClick);
 
-  // Garantir que a transmissão continue ativa quando voltar à janela
+  // Puxador touch para celular (Bottom Sheet)
+  bottomSheetHandle.addEventListener('click', () => {
+    sidebarPanel.classList.toggle('expanded');
+  });
+
+  // Garantir GPS contínuo ao focar ou reabrir
   window.addEventListener('focus', startContinuousTransmission);
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) startContinuousTransmission();
-  });
-
-  btnToggleSidebar.addEventListener('click', () => {
-    sidebarPanel.classList.toggle('open');
   });
 
   btnEditName.addEventListener('click', () => {
@@ -642,13 +737,14 @@ function registerEventListeners() {
     if (newName) {
       setUserName(newName);
       myAvatarLetter.textContent = newName.charAt(0).toUpperCase();
+      userInitialBadge.textContent = newName.charAt(0).toUpperCase();
       showToast(`Nome salvo como "${newName}".`);
     }
   });
 
   btnCopyCircleCode.addEventListener('click', () => {
     navigator.clipboard.writeText(currentCircle);
-    showToast(`Código da Família (${currentCircle}) copiado para a área de transferência!`);
+    showToast(`Código da Família (${currentCircle}) copiado!`);
   });
 
   btnShareWhatsApp.addEventListener('click', shareInviteWhatsApp);
@@ -671,6 +767,9 @@ function registerEventListeners() {
 
   btnFitBounds.addEventListener('click', () => {
     fitAllMembers();
+    if (window.innerWidth <= 768) {
+      sidebarPanel.classList.remove('expanded');
+    }
   });
 
   // Modal de Família
@@ -690,11 +789,10 @@ function registerEventListeners() {
   tabJoinFamily.addEventListener('click', () => switchFamilyTab('join'));
   tabMyFamilies.addEventListener('click', () => switchFamilyTab('my'));
 
-  // Ação: Criar Nova Família
   btnActionCreateFamily.addEventListener('click', async () => {
     const familyName = inputNewFamilyName.value.trim();
     if (!familyName) {
-      alert('Por favor, informe o nome da sua família (ex: Família Silva).');
+      alert('Informe o nome da sua família (ex: Família Silva).');
       return;
     }
 
@@ -710,13 +808,12 @@ function registerEventListeners() {
       inputNewFamilyName.value = '';
       await switchActiveCircle(newFamily.code, newFamily.name);
       modalCircle.classList.add('hidden');
-      showToast(`🎉 Família "${newFamily.name}" criada com o código ${newFamily.code}! Compartilhe este código.`);
+      showToast(`🎉 Família "${newFamily.name}" criada com código ${newFamily.code}!`);
     } catch (err) {
       alert(`Erro ao criar família: ${err.message}`);
     }
   });
 
-  // Ação: Entrar na Família com Código
   btnActionJoinFamily.addEventListener('click', async () => {
     const code = inputCircleCode.value.trim().toUpperCase();
     if (!code) {
@@ -735,74 +832,22 @@ function registerEventListeners() {
 
       await switchActiveCircle(joinedCircle.code, joinedCircle.name);
       modalCircle.classList.add('hidden');
-      showToast(`🎉 Você agora faz parte da família "${joinedCircle.name}"!`);
+      showToast(`🎉 Você entrou na família "${joinedCircle.name}"!`);
     } catch (err) {
       alert(`Erro ao entrar na família: ${err.message}`);
     }
   });
 
-  // Autenticação Modal
-  btnOpenAuth.addEventListener('click', () => {
-    switchAuthTab('login');
-    modalAuth.classList.remove('hidden');
+  // Modal Menu do Usuário & Logout
+  btnUserMenu.addEventListener('click', () => {
+    modalUserMenu.classList.remove('hidden');
   });
 
-  btnCloseAuthModal.addEventListener('click', () => modalAuth.classList.add('hidden'));
+  btnCloseUserMenuModal.addEventListener('click', () => modalUserMenu.classList.add('hidden'));
 
-  tabLogin.addEventListener('click', () => switchAuthTab('login'));
-  tabRegister.addEventListener('click', () => switchAuthTab('register'));
-  tabVerify.addEventListener('click', () => switchAuthTab('verify'));
-
-  formLogin.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const email = loginEmail.value.trim();
-    const password = loginPassword.value;
-
-    try {
-      showToast('Entrando...');
-      await signInUser(email, password);
-      modalAuth.classList.add('hidden');
-      showToast('Login realizado com sucesso!');
-    } catch (err) {
-      alert(`Erro no login: ${err.message}`);
-    }
-  });
-
-  formRegister.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const name = regName.value.trim();
-    const email = regEmail.value.trim();
-    const password = regPassword.value;
-
-    try {
-      showToast('Cadastrando e enviando e-mail...');
-      await signUpUser(name, email, password, myColor);
-      verifyEmail.value = email;
-      switchAuthTab('verify');
-      showToast('Conta criada! Verifique o token enviado para o seu e-mail.');
-    } catch (err) {
-      alert(`Erro no cadastro: ${err.message}`);
-    }
-  });
-
-  formVerify.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const email = verifyEmail.value.trim();
-    const token = verifyToken.value.trim();
-
-    try {
-      showToast('Validando token...');
-      await verifyEmailOtp(email, token);
-      modalAuth.classList.add('hidden');
-      showToast('E-mail e conta confirmados com sucesso!');
-    } catch (err) {
-      alert(`Token inválido ou expirado: ${err.message}`);
-    }
-  });
-
-  btnLogoutUser.addEventListener('click', async () => {
+  btnActionLogout.addEventListener('click', async () => {
+    modalUserMenu.classList.add('hidden');
     await signOutUser();
-    modalAuth.classList.add('hidden');
     showToast('Você saiu da sua conta.');
   });
 

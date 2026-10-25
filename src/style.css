@@ -1,5 +1,5 @@
 /* ==============================================================================
-   SENTINEL — REAL-TIME GEOLOCATION DESIGN SYSTEM
+   SENTINEL — REAL-TIME GEOLOCATION DESIGN SYSTEM (MOBILE-FIRST)
    Baseado nas diretrizes de design de interface exclusiva e de alta legibilidade.
    ============================================================================== */
 
@@ -10,7 +10,7 @@
   --bg-panel-elevated: #162036;
   --bg-input: #10192d;
   
-  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-subtle: rgba(255, 255, 255, 0.08);
   --border-medium: #1e293b;
   --border-focus: #0091ff;
 
@@ -35,9 +35,9 @@
   /* Geometria */
   --radius-sm: 6px;
   --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-lg: 16px;
   --radius-full: 9999px;
-  --header-height: 64px;
+  --header-height: 60px;
   --sidebar-width: 380px;
 }
 
@@ -46,11 +46,13 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html, body {
   width: 100%;
   height: 100%;
+  height: 100dvh;
   overflow: hidden;
   font-family: var(--font-sans);
   background-color: var(--bg-canvas);
@@ -58,12 +60,81 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ==============================================================================
+   TELA DE LOGIN OBRIGATÓRIA (AUTH GATE)
+   ============================================================================== */
+.auth-gate-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  background: radial-gradient(circle at top center, #13223f 0%, #080c14 70%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5000;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.auth-gate-card {
+  width: 100%;
+  max-width: 420px;
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-lg);
+  padding: 28px 24px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75);
+}
+
+.auth-gate-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.brand-icon.large {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+}
+
+.brand-icon.large .radar-dot {
+  width: 14px;
+  height: 14px;
+}
+
+.auth-gate-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+}
+
+.auth-gate-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.auth-gate-footer {
+  text-align: center;
+  margin-top: 20px;
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+}
+
 /* Layout Principal */
 .app-layout {
   display: flex;
   flex-direction: column;
   width: 100vw;
-  height: 100vh;
+  height: 100dvh;
+  position: relative;
+  overflow: hidden;
 }
 
 /* Header */
@@ -74,7 +145,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  padding: 0 16px;
   z-index: 1000;
   flex-shrink: 0;
 }
@@ -82,24 +153,25 @@ html, body {
 .header-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .brand-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
   background: linear-gradient(135deg, #0091ff, #0050b3);
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
   box-shadow: 0 0 15px var(--signal-accent-glow);
+  flex-shrink: 0;
 }
 
 .radar-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background-color: #ffffff;
   animation: radarPulse 2s infinite ease-out;
@@ -107,7 +179,7 @@ html, body {
 
 @keyframes radarPulse {
   0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); }
-  70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(255, 255, 255, 0); }
   100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
 }
 
@@ -117,25 +189,26 @@ html, body {
 }
 
 .brand-title {
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--text-main);
-  line-height: 1.2;
+  line-height: 1.1;
 }
 
 .brand-badge-btn {
   background: none;
   border: none;
   color: var(--signal-accent);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;
   text-align: left;
   padding: 0;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
+  white-space: nowrap;
 }
 
 .brand-badge-btn:hover {
@@ -147,40 +220,41 @@ html, body {
   align-items: center;
 }
 
-.telemetry-pill {
+.live-gps-badge {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  background-color: var(--bg-canvas);
-  border: 1px solid var(--border-subtle);
+  gap: 6px;
+  padding: 5px 12px;
+  background-color: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
   border-radius: var(--radius-full);
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--text-secondary);
+  color: #34d399;
+  font-size: 0.75rem;
+  font-weight: 600;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.15);
+  user-select: none;
+  white-space: nowrap;
 }
 
-.status-indicator-dot {
-  width: 8px;
-  height: 8px;
+.live-dot-ping {
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background-color: var(--signal-warning);
-  transition: background-color 0.3s ease;
-}
-
-.status-indicator-dot.online {
   background-color: var(--signal-live);
-  box-shadow: 0 0 8px var(--signal-live);
+  box-shadow: 0 0 6px var(--signal-live);
+  animation: livePing 2s infinite ease-out;
 }
 
-.status-indicator-dot.offline {
-  background-color: var(--signal-danger);
+@keyframes livePing {
+  0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }
 
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 /* Botões */
@@ -188,8 +262,8 @@ html, body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 8px 16px;
+  gap: 6px;
+  padding: 8px 14px;
   font-size: 0.85rem;
   font-weight: 600;
   font-family: inherit;
@@ -201,8 +275,8 @@ html, body {
 }
 
 .btn-icon {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
 }
 
 .btn-primary {
@@ -231,36 +305,6 @@ html, body {
 
 .btn-whatsapp:hover {
   background-color: var(--signal-whatsapp);
-}
-
-.live-gps-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  background-color: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.35);
-  border-radius: var(--radius-full);
-  color: #34d399;
-  font-size: 0.8rem;
-  font-weight: 600;
-  box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
-  user-select: none;
-}
-
-.live-dot-ping {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--signal-live);
-  box-shadow: 0 0 8px var(--signal-live);
-  animation: livePing 2s infinite ease-out;
-}
-
-@keyframes livePing {
-  0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-  70% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
-  100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }
 
 .btn-danger {
@@ -297,16 +341,6 @@ html, body {
   text-decoration: underline;
 }
 
-.btn-icon-only {
-  padding: 8px;
-  background: var(--bg-panel-elevated);
-  border: 1px solid var(--border-medium);
-  color: var(--text-main);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .btn-sm {
   padding: 5px 10px;
   font-size: 0.78rem;
@@ -316,24 +350,21 @@ html, body {
   width: 100%;
 }
 
-.mobile-only {
-  display: none;
-}
-
 .hidden {
   display: none !important;
 }
 
-/* Área de Trabalho */
+/* Área de Trabalho (Workspace) */
 .app-workspace {
   display: flex;
   flex: 1;
   position: relative;
   overflow: hidden;
-  height: calc(100vh - var(--header-height));
+  height: calc(100dvh - var(--header-height));
+  width: 100%;
 }
 
-/* Sidebar Esquerda */
+/* Painel Lateral no Desktop */
 .sidebar-panel {
   width: var(--sidebar-width);
   background-color: var(--bg-panel);
@@ -341,13 +372,23 @@ html, body {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow-y: auto;
   z-index: 500;
   flex-shrink: 0;
 }
 
+.bottom-sheet-handle-bar {
+  display: none; /* Apenas no mobile */
+}
+
+.sidebar-scrollable-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+}
+
 .panel-section {
-  padding: 16px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -360,11 +401,11 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .section-title {
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 700;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -376,8 +417,8 @@ html, body {
   background-color: var(--bg-canvas);
   border: 1px solid var(--border-medium);
   border-radius: var(--radius-md);
-  margin: 14px;
-  padding: 14px;
+  margin: 12px;
+  padding: 12px;
 }
 
 .profile-header {
@@ -388,8 +429,8 @@ html, body {
 }
 
 .avatar-ring {
-  width: 44px;
-  height: 44px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   background: linear-gradient(135deg, #0284c7, #0369a1);
   display: flex;
@@ -418,7 +459,7 @@ html, body {
   border: 1px solid transparent;
   color: var(--text-main);
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   font-family: inherit;
   padding: 2px 4px;
   border-radius: var(--radius-sm);
@@ -441,41 +482,36 @@ html, body {
   cursor: pointer;
 }
 
-.btn-ghost-small:hover {
-  color: var(--text-main);
-  border-color: var(--border-focus);
-}
-
 .profile-sub {
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-  display: block;
-}
-
-.profile-sub.live {
+  font-size: 0.73rem;
   color: var(--signal-live);
-  font-weight: 600;
+  display: block;
+  font-weight: 500;
 }
 
 .profile-email-badge {
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   color: var(--signal-accent);
   background-color: rgba(0, 145, 255, 0.1);
-  padding: 2px 6px;
+  padding: 1px 6px;
   border-radius: 4px;
   display: inline-block;
-  margin-top: 4px;
+  margin-top: 3px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Grid de Telemetria com 6 parâmetros */
 .telemetry-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 6px;
   background-color: var(--bg-panel);
-  padding: 10px;
+  padding: 8px;
   border-radius: var(--radius-sm);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .telemetry-item {
@@ -486,13 +522,13 @@ html, body {
 }
 
 .telemetry-label {
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   color: var(--text-tertiary);
   margin-bottom: 2px;
 }
 
 .telemetry-value {
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-family: var(--font-mono);
   font-weight: 600;
   color: var(--text-main);
@@ -500,11 +536,11 @@ html, body {
 }
 
 .telemetry-value.text-xs {
-  font-size: 0.68rem;
+  font-size: 0.65rem;
 }
 
 .simulation-row {
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 /* Card do Círculo / Família */
@@ -514,25 +550,25 @@ html, body {
   justify-content: space-between;
   background-color: var(--bg-panel-elevated);
   border: 1px solid var(--border-subtle);
-  padding: 12px 14px;
+  padding: 10px 12px;
   border-radius: var(--radius-md);
 }
 
 .circle-info {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .circle-name {
-  font-size: 0.88rem;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--text-main);
 }
 
 .circle-code-tag {
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   color: var(--signal-accent);
   background-color: rgba(0, 145, 255, 0.1);
   padding: 2px 6px;
@@ -570,7 +606,6 @@ html, body {
 .member-item:hover {
   background-color: #1a2742;
   border-color: var(--border-medium);
-  transform: translateY(-1px);
 }
 
 .member-main {
@@ -609,13 +644,13 @@ html, body {
 }
 
 .member-name {
-  font-size: 0.88rem;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--text-main);
 }
 
 .member-status {
-  font-size: 0.73rem;
+  font-size: 0.72rem;
   color: var(--text-secondary);
 }
 
@@ -674,16 +709,16 @@ html, body {
 
 /* Estado Vazio */
 .empty-state, .empty-places {
-  padding: 24px 12px;
+  padding: 20px 12px;
   text-align: center;
   color: var(--text-tertiary);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   line-height: 1.4;
 }
 
 .empty-state small {
   display: block;
-  margin-top: 6px;
+  margin-top: 4px;
   color: var(--text-secondary);
 }
 
@@ -702,7 +737,7 @@ html, body {
   background-color: var(--bg-canvas);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
 }
 
 .place-name {
@@ -712,7 +747,7 @@ html, body {
 .place-radius {
   color: var(--text-tertiary);
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
 }
 
 /* Sidebar Footer */
@@ -722,7 +757,7 @@ html, body {
   margin-top: auto;
 }
 
-/* Mapa e Canvas com suporte total a Leaflet */
+/* Mapa e Canvas com preenchimento 100% */
 .map-wrapper {
   flex: 1;
   position: relative;
@@ -741,8 +776,8 @@ html, body {
 /* Controles Flutuantes do Mapa */
 .map-floating-controls {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: 14px;
+  right: 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -750,8 +785,8 @@ html, body {
 }
 
 .map-control-btn {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: var(--radius-md);
   background-color: var(--bg-panel);
   border: 1px solid var(--border-medium);
@@ -783,10 +818,10 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 1000;
+  z-index: 2500;
   pointer-events: none;
   width: 90%;
-  max-width: 420px;
+  max-width: 400px;
 }
 
 .toast {
@@ -819,26 +854,28 @@ html, body {
 /* Modais e Abas */
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
+  inset: 0;
   width: 100vw;
-  height: 100vh;
-  background-color: rgba(0, 0, 0, 0.7);
+  height: 100dvh;
+  background-color: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2000;
+  z-index: 3000;
+  padding: 16px;
 }
 
 .modal-card {
-  width: 90%;
+  width: 100%;
   max-width: 440px;
   background-color: var(--bg-panel);
   border: 1px solid var(--border-medium);
   border-radius: var(--radius-lg);
   padding: 20px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7);
+  max-height: 90dvh;
+  overflow-y: auto;
 }
 
 .modal-header {
@@ -879,10 +916,11 @@ html, body {
   color: var(--text-secondary);
   font-size: 0.8rem;
   font-weight: 600;
-  padding: 6px 8px;
+  padding: 8px 6px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.15s ease;
+  text-align: center;
 }
 
 .auth-tab.active {
@@ -949,7 +987,7 @@ html, body {
   margin-top: 20px;
 }
 
-/* Marcadores Personalizados no Mapa Leaflet */
+/* Marcadores Leaflet */
 .leaflet-container {
   background-color: #0b111e !important;
   font-family: var(--font-sans) !important;
@@ -1010,31 +1048,118 @@ html, body {
   pointer-events: none;
 }
 
-/* Responsividade Mobile */
+/* ==============================================================================
+   RESPONSIVIDADE TOTAL PARA CELULAR (ESTILO APP NATIVO / BOTTOM SHEET)
+   ============================================================================== */
 @media (max-width: 768px) {
-  .mobile-only {
-    display: inline-flex;
+  :root {
+    --header-height: 54px;
   }
 
   .app-header {
     padding: 0 12px;
   }
 
-  .header-center {
-    display: none;
+  .brand-title {
+    font-size: 0.98rem;
   }
 
-  .sidebar-panel {
+  .live-gps-badge {
+    padding: 4px 8px;
+    font-size: 0.7rem;
+  }
+
+  /* O mapa preenche 100% do fundo */
+  .map-wrapper {
     position: absolute;
-    top: var(--header-height);
-    left: 0;
-    width: 100%;
-    height: calc(100vh - var(--header-height));
-    transform: translateX(-100%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    inset: 0;
+    width: 100vw;
+    height: 100dvh;
+    z-index: 1;
   }
 
-  .sidebar-panel.open {
-    transform: translateX(0);
+  /* A sidebar se transforma em Bottom Sheet puxável estilo Life360/Uber */
+  .sidebar-panel.bottom-sheet {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100vw;
+    height: 75dvh;
+    max-height: 80dvh;
+    border-radius: 20px 20px 0 0;
+    background-color: rgba(15, 23, 42, 0.96);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border-medium);
+    border-right: none;
+    z-index: 1200;
+    transform: translateY(calc(100% - 64px)); /* Deixa apenas a barra visível por padrão */
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.6);
+  }
+
+  /* Estado expandido do Bottom Sheet */
+  .sidebar-panel.bottom-sheet.expanded {
+    transform: translateY(0);
+  }
+
+  /* Puxador Touch no Celular */
+  .bottom-sheet-handle-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 16px 8px;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .bottom-sheet-pill {
+    width: 44px;
+    height: 5px;
+    border-radius: var(--radius-full);
+    background-color: #475569;
+    margin-bottom: 8px;
+  }
+
+  .bottom-sheet-quick-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+
+  .sheet-toggle-icon {
+    font-size: 0.75rem;
+    color: var(--signal-accent);
+    transition: transform 0.3s ease;
+  }
+
+  .sidebar-panel.bottom-sheet.expanded .sheet-toggle-icon {
+    transform: rotate(180deg);
+  }
+
+  .sidebar-scrollable-content {
+    height: calc(100% - 64px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 24px;
+  }
+
+  /* Ajuste dos controles flutuantes no celular para não colidir com o cabeçalho */
+  .map-floating-controls {
+    top: 70px;
+    right: 12px;
+  }
+
+  .map-control-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .toast-container {
+    bottom: 80px;
   }
 }

@@ -2,9 +2,12 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Sentinel — Geolocalização em Tempo Real</title>
   <meta name="description" content="Rastreamento familiar em tempo real estilo Life360 com criação de grupos, códigos de convite e telemetria completa." />
+  <meta name="theme-color" content="#080c14" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%230091ff'><circle cx='12' cy='12' r='10' stroke='%230091ff' stroke-width='2' fill='none'/><circle cx='12' cy='12' r='4' fill='%230091ff'/></svg>" />
 
   <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
@@ -16,7 +19,84 @@
   <link rel="stylesheet" href="./src/style.css" />
 </head>
 <body class="app-body">
-  <div id="app" class="app-layout">
+
+  <!-- TELA DE LOGIN OBRIGATÓRIA (AUTH GATEWAY) -->
+  <div id="authGate" class="auth-gate-overlay">
+    <div class="auth-gate-card">
+      <div class="auth-gate-brand">
+        <div class="brand-icon large">
+          <span class="radar-dot"></span>
+        </div>
+        <h1 class="auth-gate-title">Sentinel</h1>
+        <p class="auth-gate-subtitle">Rastreamento Familiar & Proteção em Tempo Real</p>
+      </div>
+
+      <!-- Abas de Autenticação -->
+      <div class="auth-tabs" id="gateAuthTabs">
+        <button class="auth-tab active" id="gateTabLogin">Entrar</button>
+        <button class="auth-tab" id="gateTabRegister">Criar Conta</button>
+        <button class="auth-tab" id="gateTabVerify">Confirmar Código</button>
+      </div>
+
+      <!-- Formulário: Login -->
+      <form id="gateFormLogin" class="auth-form">
+        <div class="form-group">
+          <label for="gateLoginEmail">E-mail:</label>
+          <input type="email" id="gateLoginEmail" class="input-text" placeholder="seu@email.com" required autocomplete="email" />
+        </div>
+        <div class="form-group">
+          <label for="gateLoginPassword">Senha:</label>
+          <input type="password" id="gateLoginPassword" class="input-text" placeholder="••••••••" required autocomplete="current-password" />
+        </div>
+        <button type="submit" class="btn btn-primary w-full" id="btnGateSubmitLogin">
+          Acessar Aplicativo
+        </button>
+      </form>
+
+      <!-- Formulário: Cadastro -->
+      <form id="gateFormRegister" class="auth-form hidden">
+        <div class="form-group">
+          <label for="gateRegName">Seu Nome / Apelido:</label>
+          <input type="text" id="gateRegName" class="input-text" placeholder="Ex: Pai, João, Maria" required />
+        </div>
+        <div class="form-group">
+          <label for="gateRegEmail">Seu E-mail:</label>
+          <input type="email" id="gateRegEmail" class="input-text" placeholder="seu@email.com" required autocomplete="email" />
+        </div>
+        <div class="form-group">
+          <label for="gateRegPassword">Criar Senha (mínimo 6 dígitos):</label>
+          <input type="password" id="gateRegPassword" class="input-text" placeholder="••••••••" minlength="6" required autocomplete="new-password" />
+        </div>
+        <p class="helper-text">Um código de confirmação (token) será enviado para seu e-mail.</p>
+        <button type="submit" class="btn btn-primary w-full" id="btnGateSubmitRegister">
+          Criar Conta & Receber Token
+        </button>
+      </form>
+
+      <!-- Formulário: Confirmar Token -->
+      <form id="gateFormVerify" class="auth-form hidden">
+        <p class="modal-desc">Digite o e-mail cadastrado e o token/código de confirmação que enviamos para sua caixa de entrada.</p>
+        <div class="form-group">
+          <label for="gateVerifyEmail">E-mail cadastrado:</label>
+          <input type="email" id="gateVerifyEmail" class="input-text" placeholder="seu@email.com" required />
+        </div>
+        <div class="form-group">
+          <label for="gateVerifyToken">Token do E-mail:</label>
+          <input type="text" id="gateVerifyToken" class="input-text uppercase" placeholder="Ex: 123456" required />
+        </div>
+        <button type="submit" class="btn btn-primary w-full" id="btnGateSubmitVerify">
+          Confirmar Token & Liberar Acesso
+        </button>
+      </form>
+
+      <div class="auth-gate-footer">
+        <small>Segurança de ponta a ponta via Supabase Auth</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- APLICAÇÃO PRINCIPAL (LIBERADA APENAS APÓS O LOGIN) -->
+  <div id="app" class="app-layout hidden">
     
     <!-- Top Navigation Header -->
     <header class="app-header">
@@ -33,31 +113,16 @@
       </div>
 
       <div class="header-center">
-        <!-- Live status telemetry pill -->
-        <div class="telemetry-pill" id="telemetryPill">
-          <span class="status-indicator-dot" id="globalStatusDot"></span>
-          <span id="globalStatusText">Conectando ao Supabase...</span>
+        <!-- Always-On Transmission Status Pill -->
+        <div class="live-gps-badge" id="liveGpsBadge" title="Transmissão contínua em tempo real ativada">
+          <span class="live-dot-ping"></span>
+          <span id="liveGpsText">GPS Ao Vivo</span>
         </div>
       </div>
 
       <div class="header-actions">
-        <!-- Auth button (Login / Perfil) -->
-        <button id="btnOpenAuth" class="btn btn-secondary btn-sm" title="Fazer login ou cadastrar nova conta">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-            <circle cx="12" cy="7" r="4"/>
-          </svg>
-          <span id="authButtonLabel">Entrar / Cadastrar</span>
-        </button>
-
-        <!-- Always-On Transmission Status Pill -->
-        <div class="live-gps-badge" id="liveGpsBadge" title="Transmissão contínua em tempo real ativada (estilo Life360)">
-          <span class="live-dot-ping"></span>
-          <span id="liveGpsText">GPS Transmitindo Ao Vivo</span>
-        </div>
-
         <!-- SOS Emergency button -->
-        <button id="btnSosAlert" class="btn btn-danger" title="Enviar alerta de emergência imediato para todos">
+        <button id="btnSosAlert" class="btn btn-danger btn-sm" title="Enviar alerta de emergência imediato para a família">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <polygon points="12 2 2 22 22 22"/>
             <line x1="12" y1="9" x2="12" y2="13"/>
@@ -66,13 +131,9 @@
           <span>SOS</span>
         </button>
 
-        <!-- Mobile Drawer Toggle -->
-        <button id="btnToggleSidebar" class="btn btn-icon-only mobile-only" aria-label="Abrir menu de membros">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="3" y1="12" x2="21" y2="12"/>
-            <line x1="3" y1="6" x2="21" y2="6"/>
-            <line x1="3" y1="18" x2="21" y2="18"/>
-          </svg>
+        <!-- User Profile & Logout -->
+        <button id="btnUserMenu" class="btn btn-secondary btn-sm" title="Ver perfil ou sair">
+          <span id="userInitialBadge">U</span>
         </button>
       </div>
     </header>
@@ -80,124 +141,132 @@
     <!-- Main Content Area -->
     <main class="app-workspace">
       
-      <!-- Left Control Sidebar -->
-      <aside class="sidebar-panel" id="sidebarPanel">
+      <!-- Painel de Controle (Desktop: Sidebar / Mobile: Bottom Sheet Deslizante) -->
+      <aside class="sidebar-panel bottom-sheet" id="sidebarPanel">
         
-        <!-- Active User Profile Card -->
-        <section class="panel-section profile-card">
-          <div class="profile-header">
-            <div class="avatar-ring" id="myAvatarRing">
-              <span id="myAvatarLetter">EU</span>
-            </div>
-            <div class="profile-meta">
-              <div class="profile-name-row">
-                <input type="text" id="inputMyName" class="input-transparent" value="Meu Celular" title="Clique para renomear seu usuário" />
-                <button id="btnEditName" class="btn-ghost-small" title="Salvar nome">Salvar</button>
+        <!-- Puxador Touch para Celular (Bottom Sheet Handle) -->
+        <div class="bottom-sheet-handle-bar" id="bottomSheetHandle">
+          <div class="bottom-sheet-pill"></div>
+          <div class="bottom-sheet-quick-info">
+            <span id="sheetQuickStatus">Membros da Família</span>
+            <span class="sheet-toggle-icon">▲</span>
+          </div>
+        </div>
+
+        <div class="sidebar-scrollable-content">
+          
+          <!-- Active User Profile Card -->
+          <section class="panel-section profile-card">
+            <div class="profile-header">
+              <div class="avatar-ring" id="myAvatarRing">
+                <span id="myAvatarLetter">EU</span>
               </div>
-              <span class="profile-sub" id="myTrackingStatus">GPS Desligado</span>
-              <span class="profile-email-badge hidden" id="userEmailBadge"></span>
+              <div class="profile-meta">
+                <div class="profile-name-row">
+                  <input type="text" id="inputMyName" class="input-transparent" value="Meu Celular" title="Clique para renomear" />
+                  <button id="btnEditName" class="btn-ghost-small" title="Salvar nome">Salvar</button>
+                </div>
+                <span class="profile-sub" id="myTrackingStatus">GPS Transmitindo em Tempo Real</span>
+                <span class="profile-email-badge" id="userEmailBadge">usuario@email.com</span>
+              </div>
             </div>
-          </div>
-          
-          <!-- Grid com Máximo de Informações de Telemetria -->
-          <div class="telemetry-grid">
-            <div class="telemetry-item">
-              <span class="telemetry-label">Bateria</span>
-              <span class="telemetry-value" id="myBatteryValue">--%</span>
+            
+            <!-- Grid com Máximo de Informações de Telemetria -->
+            <div class="telemetry-grid">
+              <div class="telemetry-item">
+                <span class="telemetry-label">Bateria</span>
+                <span class="telemetry-value" id="myBatteryValue">--%</span>
+              </div>
+              <div class="telemetry-item">
+                <span class="telemetry-label">Velocidade</span>
+                <span class="telemetry-value" id="mySpeedValue">0 km/h</span>
+              </div>
+              <div class="telemetry-item">
+                <span class="telemetry-label">Precisão</span>
+                <span class="telemetry-value" id="myAccuracyValue">-- m</span>
+              </div>
+              <div class="telemetry-item">
+                <span class="telemetry-label">Direção</span>
+                <span class="telemetry-value" id="myHeadingValue">--</span>
+              </div>
+              <div class="telemetry-item">
+                <span class="telemetry-label">Altitude</span>
+                <span class="telemetry-value" id="myAltitudeValue">-- m</span>
+              </div>
+              <div class="telemetry-item">
+                <span class="telemetry-label">Coordenadas</span>
+                <span class="telemetry-value text-xs" id="myCoordsValue">--</span>
+              </div>
             </div>
-            <div class="telemetry-item">
-              <span class="telemetry-label">Velocidade</span>
-              <span class="telemetry-value" id="mySpeedValue">0 km/h</span>
-            </div>
-            <div class="telemetry-item">
-              <span class="telemetry-label">Precisão</span>
-              <span class="telemetry-value" id="myAccuracyValue">-- m</span>
-            </div>
-            <div class="telemetry-item">
-              <span class="telemetry-label">Direção</span>
-              <span class="telemetry-value" id="myHeadingValue">--</span>
-            </div>
-            <div class="telemetry-item">
-              <span class="telemetry-label">Altitude</span>
-              <span class="telemetry-value" id="myAltitudeValue">-- m</span>
-            </div>
-            <div class="telemetry-item">
-              <span class="telemetry-label">Coordenadas</span>
-              <span class="telemetry-value text-xs" id="myCoordsValue">--</span>
-            </div>
-          </div>
 
-          <div class="simulation-row">
-            <button id="btnSimulateRoute" class="btn btn-secondary btn-sm w-full" title="Simular movimentação em tempo real para testes no computador">
-              🚗 Simular Rota de Teste
+            <div class="simulation-row">
+              <button id="btnSimulateRoute" class="btn btn-secondary btn-sm w-full" title="Simular movimentação em tempo real para testes no computador">
+                🚗 Simular Rota de Teste (PC)
+              </button>
+            </div>
+          </section>
+
+          <!-- Family / Circle Management Section -->
+          <section class="panel-section">
+            <div class="section-title-row">
+              <h2 class="section-title">Família Ativa</h2>
+              <button id="btnChangeCircle" class="btn-link">Gerenciar / Trocar</button>
+            </div>
+            
+            <div class="circle-card">
+              <div class="circle-info">
+                <span class="circle-name" id="circleNameDisplay">Minha Família</span>
+                <span class="circle-code-tag" id="circleCodeDisplay">FAMILIA-01</span>
+              </div>
+              <div class="circle-actions-row">
+                <button id="btnCopyCircleCode" class="btn btn-secondary btn-sm" title="Copiar código de convite">
+                  Copiar
+                </button>
+                <button id="btnShareWhatsApp" class="btn btn-whatsapp btn-sm" title="Enviar convite no WhatsApp">
+                  WhatsApp
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Members Online Section -->
+          <section class="panel-section flex-grow">
+            <div class="section-title-row">
+              <h2 class="section-title">Membros no Mapa (<span id="memberCount">0</span>)</h2>
+              <button id="btnFitBounds" class="btn-link">Ver Todos</button>
+            </div>
+
+            <div class="members-list" id="membersList">
+              <div class="empty-state">
+                <p>Nenhum outro membro transmitindo nesta família.</p>
+                <small>Envie o código de convite para adicionar pessoas.</small>
+              </div>
+            </div>
+          </section>
+
+          <!-- Safe Places (Geofences) Section -->
+          <section class="panel-section">
+            <div class="section-title-row">
+              <h2 class="section-title">Lugares Seguros</h2>
+              <button id="btnAddPlaceModal" class="btn-link">+ Adicionar</button>
+            </div>
+            <div class="places-list" id="placesList">
+              <div class="empty-places">
+                <span>Nenhum lugar cadastrado ainda.</span>
+              </div>
+            </div>
+          </section>
+
+          <!-- Sidebar Footer -->
+          <footer class="sidebar-footer">
+            <button id="btnOpenSettings" class="btn btn-ghost w-full">
+              ⚙️ Configurações do Supabase
             </button>
-          </div>
-        </section>
-
-        <!-- Family / Circle Management Section -->
-        <section class="panel-section">
-          <div class="section-title-row">
-            <h2 class="section-title">Família Ativa</h2>
-            <button id="btnChangeCircle" class="btn-link">Gerenciar / Trocar</button>
-          </div>
-          
-          <div class="circle-card">
-            <div class="circle-info">
-              <span class="circle-name" id="circleNameDisplay">Minha Família</span>
-              <span class="circle-code-tag" id="circleCodeDisplay">FAMILIA-01</span>
-            </div>
-            <div class="circle-actions-row">
-              <button id="btnCopyCircleCode" class="btn btn-secondary btn-sm" title="Copiar código de convite">
-                Copiar
-              </button>
-              <button id="btnShareWhatsApp" class="btn btn-whatsapp btn-sm" title="Enviar convite para amigo/familiar pelo WhatsApp">
-                WhatsApp
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <!-- Members Online Section -->
-        <section class="panel-section flex-grow">
-          <div class="section-title-row">
-            <h2 class="section-title">Membros desta Família (<span id="memberCount">0</span>)</h2>
-            <button id="btnFitBounds" class="btn-link">Enquadrar Todos</button>
-          </div>
-
-          <div class="members-list" id="membersList">
-            <div class="empty-state">
-              <p>Nenhum outro membro transmitindo nesta família.</p>
-              <small>Envie o código para outro familiar entrar e aparecer no mapa.</small>
-            </div>
-          </div>
-        </section>
-
-        <!-- Safe Places (Geofences) Section -->
-        <section class="panel-section">
-          <div class="section-title-row">
-            <h2 class="section-title">Lugares Seguros</h2>
-            <button id="btnAddPlaceModal" class="btn-link">+ Adicionar</button>
-          </div>
-          <div class="places-list" id="placesList">
-            <div class="empty-places">
-              <span>Nenhum lugar cadastrado ainda.</span>
-            </div>
-          </div>
-        </section>
-
-        <!-- App Connection Settings trigger -->
-        <footer class="sidebar-footer">
-          <button id="btnOpenSettings" class="btn btn-ghost w-full">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-            Configurações do Supabase
-          </button>
-        </footer>
+          </footer>
+        </div>
       </aside>
 
-      <!-- Map View Area -->
+      <!-- Map View Area (Ocupa 100% da tela) -->
       <section class="map-wrapper">
         <div id="map" class="map-canvas"></div>
 
@@ -274,71 +343,22 @@
       </div>
     </div>
 
-    <!-- Modal: Autenticação (Login, Cadastro e Token de E-mail) -->
-    <div id="modalAuth" class="modal-overlay hidden">
+    <!-- Modal: Menu do Usuário & Logout -->
+    <div id="modalUserMenu" class="modal-overlay hidden">
       <div class="modal-card">
         <div class="modal-header">
-          <h3 class="modal-title" id="authModalTitle">Acessar Conta</h3>
-          <button class="modal-close" id="btnCloseAuthModal">&times;</button>
+          <h3 class="modal-title">Minha Conta</h3>
+          <button class="modal-close" id="btnCloseUserMenuModal">&times;</button>
         </div>
-        
-        <div class="auth-tabs" id="authTabsContainer">
-          <button class="auth-tab active" id="tabLogin">Entrar</button>
-          <button class="auth-tab" id="tabRegister">Cadastrar</button>
-          <button class="auth-tab" id="tabVerify">Confirmar Código</button>
-        </div>
-
         <div class="modal-body">
-          <!-- Formulário: Login -->
-          <form id="formLogin" class="auth-form">
-            <div class="form-group">
-              <label for="loginEmail">E-mail:</label>
-              <input type="email" id="loginEmail" class="input-text" placeholder="seu@email.com" required />
+          <div style="text-align: center; margin-bottom: 20px;">
+            <div class="avatar-ring" style="margin: 0 auto 12px; width: 56px; height: 56px; font-size: 1.2rem;" id="userMenuAvatar">
+              <span>U</span>
             </div>
-            <div class="form-group">
-              <label for="loginPassword">Senha:</label>
-              <input type="password" id="loginPassword" class="input-text" placeholder="••••••••" required />
-            </div>
-            <button type="submit" class="btn btn-primary w-full" id="btnSubmitLogin">Entrar</button>
-          </form>
-
-          <!-- Formulário: Cadastro -->
-          <form id="formRegister" class="auth-form hidden">
-            <div class="form-group">
-              <label for="regName">Seu Nome / Apelido:</label>
-              <input type="text" id="regName" class="input-text" placeholder="Ex: Pai, João, Maria" required />
-            </div>
-            <div class="form-group">
-              <label for="regEmail">E-mail para confirmação:</label>
-              <input type="email" id="regEmail" class="input-text" placeholder="seu@email.com" required />
-            </div>
-            <div class="form-group">
-              <label for="regPassword">Criar Senha (mínimo 6 dígitos):</label>
-              <input type="password" id="regPassword" class="input-text" placeholder="••••••••" minlength="6" required />
-            </div>
-            <p class="helper-text">Um código de confirmação (token) será enviado para seu e-mail.</p>
-            <button type="submit" class="btn btn-primary w-full" id="btnSubmitRegister">Criar Conta</button>
-          </form>
-
-          <!-- Formulário: Verificação de Token -->
-          <form id="formVerify" class="auth-form hidden">
-            <p class="modal-desc">Digite o e-mail cadastrado e o token/código de confirmação que enviamos para sua caixa de entrada.</p>
-            <div class="form-group">
-              <label for="verifyEmail">E-mail cadastrado:</label>
-              <input type="email" id="verifyEmail" class="input-text" placeholder="seu@email.com" required />
-            </div>
-            <div class="form-group">
-              <label for="verifyToken">Token / Código do E-mail:</label>
-              <input type="text" id="verifyToken" class="input-text uppercase" placeholder="Ex: 123456" required />
-            </div>
-            <button type="submit" class="btn btn-primary w-full" id="btnSubmitVerify">Validar Token & Ativar Conta</button>
-          </form>
-
-          <!-- Painel Usuário Já Logado -->
-          <div id="panelLoggedIn" class="auth-form hidden">
-            <p class="modal-desc">Você está conectado como <strong id="loggedUserDisplay"></strong>.</p>
-            <button class="btn btn-danger w-full" id="btnLogoutUser">Sair da Conta (Logout)</button>
+            <strong style="display:block; font-size: 1.05rem;" id="userMenuName">Usuário</strong>
+            <span style="color: var(--text-secondary); font-size: 0.85rem;" id="userMenuEmail">email@exemplo.com</span>
           </div>
+          <button class="btn btn-danger w-full" id="btnActionLogout">Sair da Conta (Logout)</button>
         </div>
       </div>
     </div>
