@@ -14,6 +14,9 @@ import {
   signOutUser,
   getCurrentUser,
   onAuthStateChange,
+  createFamily,
+  joinFamilyByCode,
+  getUserFamilies,
 } from './supabase.js';
 
 import {
@@ -77,10 +80,12 @@ const myAltitudeValue = document.getElementById('myAltitudeValue');
 const myCoordsValue = document.getElementById('myCoordsValue');
 const btnSimulateRoute = document.getElementById('btnSimulateRoute');
 
+// Gestão de Famílias
 const headerCircleBadge = document.getElementById('headerCircleBadge');
 const circleNameDisplay = document.getElementById('circleNameDisplay');
 const circleCodeDisplay = document.getElementById('circleCodeDisplay');
 const btnCopyCircleCode = document.getElementById('btnCopyCircleCode');
+const btnShareWhatsApp = document.getElementById('btnShareWhatsApp');
 const btnChangeCircle = document.getElementById('btnChangeCircle');
 const btnFitBounds = document.getElementById('btnFitBounds');
 const memberCount = document.getElementById('memberCount');
@@ -89,6 +94,21 @@ const membersListContainer = document.getElementById('membersList');
 const btnRecenterMe = document.getElementById('btnRecenterMe');
 const btnToggleLayer = document.getElementById('btnToggleLayer');
 const alertToastContainer = document.getElementById('alertToastContainer');
+
+// Modal de Famílias
+const modalCircle = document.getElementById('modalCircle');
+const btnCloseCircleModal = document.getElementById('btnCloseCircleModal');
+const tabCreateFamily = document.getElementById('tabCreateFamily');
+const tabJoinFamily = document.getElementById('tabJoinFamily');
+const tabMyFamilies = document.getElementById('tabMyFamilies');
+const panelCreateFamily = document.getElementById('panelCreateFamily');
+const panelJoinFamily = document.getElementById('panelJoinFamily');
+const panelMyFamilies = document.getElementById('panelMyFamilies');
+const inputNewFamilyName = document.getElementById('inputNewFamilyName');
+const btnActionCreateFamily = document.getElementById('btnActionCreateFamily');
+const inputCircleCode = document.getElementById('inputCircleCode');
+const btnActionJoinFamily = document.getElementById('btnActionJoinFamily');
+const myFamiliesList = document.getElementById('myFamiliesList');
 
 // Modal de Autenticação
 const btnOpenAuth = document.getElementById('btnOpenAuth');
@@ -114,14 +134,6 @@ const regPassword = document.getElementById('regPassword');
 const verifyEmail = document.getElementById('verifyEmail');
 const verifyToken = document.getElementById('verifyToken');
 
-// Modal Círculo
-const modalCircle = document.getElementById('modalCircle');
-const inputCircleCode = document.getElementById('inputCircleCode');
-const inputCircleName = document.getElementById('inputCircleName');
-const btnConfirmCircleModal = document.getElementById('btnConfirmCircleModal');
-const btnCancelCircleModal = document.getElementById('btnCancelCircleModal');
-const btnCloseCircleModal = document.getElementById('btnCloseCircleModal');
-
 // Modal Lugar Seguro
 const modalPlace = document.getElementById('modalPlace');
 const btnAddPlaceModal = document.getElementById('btnAddPlaceModal');
@@ -141,28 +153,23 @@ const btnCancelSettings = document.getElementById('btnCancelSettings');
 const btnCloseSettingsModal = document.getElementById('btnCloseSettingsModal');
 
 // ==============================================================================
-// INICIALIZAÇÃO DA APLICAÇÃO
+// INICIALIZAÇÃO
 // ==============================================================================
 async function initApp() {
-  // 1. Inicializar Mapa primeiro para carregar tiles sem delay
   initMap('map');
-
-  // 2. Configurar perfil e UI
   setupLocalProfile();
 
-  // 3. Monitor de Bateria nativa
   initBatteryMonitor((battery) => {
     myBatteryValue.textContent = `${battery.level}% ${battery.isCharging ? '⚡' : ''}`;
   });
 
-  // 4. Conectar ao Supabase e checar Auth
   await connectToSupabase();
   await checkAuthStatus();
-
-  // 5. Registrar eventos de cliques e formulários
   registerEventListeners();
 
-  // 6. Centralização inicial por GPS se autorizado
+  // Checar se há código de convite na URL (?join=FAM-1234)
+  checkUrlInvite();
+
   if ('geolocation' in navigator) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -174,7 +181,6 @@ async function initApp() {
   }
 }
 
-// Configura dados visuais do perfil
 function setupLocalProfile() {
   const name = getUserName();
   inputMyName.value = name;
@@ -184,12 +190,11 @@ function setupLocalProfile() {
 }
 
 function updateCircleUI() {
-  headerCircleBadge.textContent = `Círculo: ${currentCircle}`;
+  headerCircleBadge.textContent = `${currentCircleName} ▾`;
   circleNameDisplay.textContent = currentCircleName;
   circleCodeDisplay.textContent = currentCircle;
 }
 
-// Conexão com Supabase e carregamento de dados
 async function connectToSupabase() {
   const client = getSupabase();
   if (!client) {
@@ -199,7 +204,7 @@ async function connectToSupabase() {
   }
 
   globalStatusDot.className = 'status-indicator-dot online';
-  globalStatusText.textContent = 'Supabase Conectado (WebSockets Ativos)';
+  globalStatusText.textContent = 'Supabase Conectado (Tempo Real Ativo)';
 
   await loadInitialLocations();
   await loadPlaces();
@@ -207,7 +212,6 @@ async function connectToSupabase() {
   subscribeCircleLocations(currentCircle, handleIncomingLocation);
 }
 
-// Verifica status do usuário autenticado
 async function checkAuthStatus() {
   authenticatedUser = await getCurrentUser();
   updateAuthUI();
@@ -234,7 +238,18 @@ function updateAuthUI() {
   }
 }
 
-// Carrega localizações salvas
+// Verifica se foi aberto com link de convite: ex ?join=FAM-7892
+function checkUrlInvite() {
+  const params = new URLSearchParams(window.location.search);
+  const invite = params.get('join') || params.get('code');
+  if (invite) {
+    inputCircleCode.value = invite.toUpperCase();
+    switchFamilyTab('join');
+    modalCircle.classList.remove('hidden');
+    showToast(`Convite para a família ${invite.toUpperCase()} detectado! Clique em "Entrar na Família".`);
+  }
+}
+
 async function loadInitialLocations() {
   const locations = await fetchCircleLocations(currentCircle);
   locations.forEach((loc) => {
@@ -242,7 +257,6 @@ async function loadInitialLocations() {
   });
 }
 
-// Carrega lugares seguros
 async function loadPlaces() {
   placesList = await fetchPlaces(currentCircle);
   renderPlaces(placesList);
@@ -280,13 +294,9 @@ function handleIncomingLocation(data) {
   const isSelf = data.user_id === myId;
   membersMap.set(data.user_id, data);
 
-  // Atualizar marcador no mapa
   updateMemberMarker(data, isSelf);
-
-  // Atualizar lista lateral
   renderMembersList();
 
-  // Atualizar painel de telemetria se for o próprio usuário
   if (isSelf) {
     updateTelemetryCard(data);
   }
@@ -309,8 +319,8 @@ function renderMembersList() {
   if (otherMembers.length === 0) {
     membersListContainer.innerHTML = `
       <div class="empty-state">
-        <p>Nenhum outro membro transmitindo neste círculo.</p>
-        <small>Abra o link em outro celular com o mesmo código para vê-lo no mapa.</small>
+        <p>Nenhum outro membro transmitindo nesta família.</p>
+        <small>Envie o código de convite para adicionar pessoas.</small>
       </div>
     `;
     return;
@@ -374,12 +384,12 @@ function toggleTransmission() {
         btnToggleTransmit.classList.remove('active');
         transmitButtonLabel.textContent = 'Transmitir GPS';
         myTrackingStatus.textContent = 'Erro de permissão GPS';
-        showToast(`Permissão de GPS necessária: ${err.message}. Você pode usar a "Simular Rota de Teste" para testar agora!`, true);
+        showToast(`Permissão de GPS necessária: ${err.message}. Use o botão de simulação para testar no PC!`, true);
       }
     );
 
     if (started) {
-      showToast('Transmissão GPS ativada! Enviando coordenadas ao vivo.');
+      showToast('Transmissão ativada! Coordenadas enviando para a família.');
     }
   }
 }
@@ -412,7 +422,6 @@ function onPositionAcquired(pos, isSimulated = false) {
   checkGeofences(pos.latitude, pos.longitude);
 }
 
-// Alternar Simulação de Teste
 function toggleSimulation() {
   if (isSimulating()) {
     stopSimulatedTracking();
@@ -428,11 +437,10 @@ function toggleSimulation() {
       onPositionAcquired(pos, true);
     });
     btnSimulateRoute.textContent = '🛑 Parar Simulação';
-    showToast('Simulação de trajeto iniciada! Veja o marcador se mover no mapa.');
+    showToast('Simulação de trajeto iniciada! Veja seu marcador se mover.');
   }
 }
 
-// Checagem de Geofencing
 function checkGeofences(lat, lng) {
   placesList.forEach((place) => {
     const distKm = calculateDistanceKm(lat, lng, place.latitude, place.longitude);
@@ -459,7 +467,88 @@ function checkGeofences(lat, lng) {
 }
 
 // ==============================================================================
-// GESTÃO DE AUTENTICAÇÃO COM O SUPABASE (CADASTRO, LOGIN E TOKEN OTP)
+// GESTÃO DE FAMÍLIAS (ABAS, CRIAÇÃO E CONVITES)
+// ==============================================================================
+function switchFamilyTab(tab) {
+  tabCreateFamily.classList.remove('active');
+  tabJoinFamily.classList.remove('active');
+  tabMyFamilies.classList.remove('active');
+
+  panelCreateFamily.classList.add('hidden');
+  panelJoinFamily.classList.add('hidden');
+  panelMyFamilies.classList.add('hidden');
+
+  if (tab === 'create') {
+    tabCreateFamily.classList.add('active');
+    panelCreateFamily.classList.remove('hidden');
+  } else if (tab === 'join') {
+    tabJoinFamily.classList.add('active');
+    panelJoinFamily.classList.remove('hidden');
+  } else if (tab === 'my') {
+    tabMyFamilies.classList.add('active');
+    panelMyFamilies.classList.remove('hidden');
+    renderMyFamiliesList();
+  }
+}
+
+async function renderMyFamiliesList() {
+  const families = await getUserFamilies(getUserId());
+  if (families.length === 0) {
+    myFamiliesList.innerHTML = `
+      <div class="empty-state">
+        <p>Você ainda não está registrado em nenhuma família.</p>
+        <small>Crie uma nova família ou entre com um código de convite.</small>
+      </div>
+    `;
+    return;
+  }
+
+  myFamiliesList.innerHTML = families
+    .map(
+      (f) => `
+      <div class="family-select-item ${f.code === currentCircle ? 'active' : ''}" data-code="${f.code}" data-name="${f.name}">
+        <div>
+          <strong style="display:block; font-size:14px; color:#f8fafc;">${f.name}</strong>
+          <span class="family-select-code">${f.code}</span>
+        </div>
+        <button class="btn btn-secondary btn-sm">${f.code === currentCircle ? 'Ativo' : 'Acessar'}</button>
+      </div>
+    `
+    )
+    .join('');
+
+  myFamiliesList.querySelectorAll('.family-select-item').forEach((item) => {
+    item.addEventListener('click', async () => {
+      const code = item.getAttribute('data-code');
+      const name = item.getAttribute('data-name');
+      await switchActiveCircle(code, name);
+      modalCircle.classList.add('hidden');
+    });
+  });
+}
+
+async function switchActiveCircle(newCode, newName) {
+  currentCircle = newCode;
+  currentCircleName = newName;
+  localStorage.setItem('sentinel_circle_code', newCode);
+  localStorage.setItem('sentinel_circle_name', newName);
+
+  updateCircleUI();
+  membersMap.clear();
+  await connectToSupabase();
+  showToast(`Conectado à família "${newName}" (${newCode})!`);
+}
+
+// Compartilhar convite no WhatsApp
+function shareInviteWhatsApp() {
+  const inviteUrl = `${window.location.origin}${window.location.pathname}?join=${currentCircle}`;
+  const message = `Olá! Estou compartilhando minha localização com você no Sentinel. Entre na minha família usando o código *${currentCircle}* ou acesse diretamente pelo link: ${inviteUrl}`;
+  const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+  window.open(waUrl, '_blank');
+}
+
+// ==============================================================================
+// GESTÃO DE AUTENTICAÇÃO
 // ==============================================================================
 function switchAuthTab(tab) {
   tabLogin.classList.remove('active');
@@ -509,7 +598,7 @@ function showToast(message, isDanger = false) {
 }
 
 function handleSosClick() {
-  const confirmSos = confirm('Você deseja disparar um ALERTA DE EMERGÊNCIA SOS para todos os membros deste círculo?');
+  const confirmSos = confirm('Você deseja disparar um ALERTA DE EMERGÊNCIA SOS para todos os membros desta família?');
   if (!confirmSos) return;
 
   const pos = getCurrentPosition();
@@ -525,7 +614,7 @@ function handleSosClick() {
     lng
   );
 
-  showToast(`🚨 ALERTA SOS ENVIADO PARA O CÍRCULO ${currentCircle}!`, true);
+  showToast(`🚨 ALERTA SOS ENVIADO PARA A FAMÍLIA ${currentCircle}!`, true);
 
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -564,8 +653,10 @@ function registerEventListeners() {
 
   btnCopyCircleCode.addEventListener('click', () => {
     navigator.clipboard.writeText(currentCircle);
-    showToast(`Código ${currentCircle} copiado para a área de transferência!`);
+    showToast(`Código da Família (${currentCircle}) copiado para a área de transferência!`);
   });
+
+  btnShareWhatsApp.addEventListener('click', shareInviteWhatsApp);
 
   btnToggleLayer.addEventListener('click', () => {
     const layerName = toggleMapLayer();
@@ -587,6 +678,74 @@ function registerEventListeners() {
     fitAllMembers();
   });
 
+  // Modal de Família
+  headerCircleBadge.addEventListener('click', () => {
+    switchFamilyTab('create');
+    modalCircle.classList.remove('hidden');
+  });
+
+  btnChangeCircle.addEventListener('click', () => {
+    switchFamilyTab('create');
+    modalCircle.classList.remove('hidden');
+  });
+
+  btnCloseCircleModal.addEventListener('click', () => modalCircle.classList.add('hidden'));
+
+  tabCreateFamily.addEventListener('click', () => switchFamilyTab('create'));
+  tabJoinFamily.addEventListener('click', () => switchFamilyTab('join'));
+  tabMyFamilies.addEventListener('click', () => switchFamilyTab('my'));
+
+  // Ação: Criar Nova Família
+  btnActionCreateFamily.addEventListener('click', async () => {
+    const familyName = inputNewFamilyName.value.trim();
+    if (!familyName) {
+      alert('Por favor, informe o nome da sua família (ex: Família Silva).');
+      return;
+    }
+
+    try {
+      showToast('Criando família e gerando código...');
+      const newFamily = await createFamily(
+        familyName,
+        getUserId(),
+        getUserName(),
+        myColor
+      );
+
+      inputNewFamilyName.value = '';
+      await switchActiveCircle(newFamily.code, newFamily.name);
+      modalCircle.classList.add('hidden');
+      showToast(`🎉 Família "${newFamily.name}" criada com o código ${newFamily.code}! Compartilhe este código.`);
+    } catch (err) {
+      alert(`Erro ao criar família: ${err.message}`);
+    }
+  });
+
+  // Ação: Entrar na Família com Código
+  btnActionJoinFamily.addEventListener('click', async () => {
+    const code = inputCircleCode.value.trim().toUpperCase();
+    if (!code) {
+      alert('Informe o código da família para entrar.');
+      return;
+    }
+
+    try {
+      showToast('Verificando código de convite...');
+      const joinedCircle = await joinFamilyByCode(
+        code,
+        getUserId(),
+        getUserName(),
+        myColor
+      );
+
+      await switchActiveCircle(joinedCircle.code, joinedCircle.name);
+      modalCircle.classList.add('hidden');
+      showToast(`🎉 Você agora faz parte da família "${joinedCircle.name}"!`);
+    } catch (err) {
+      alert(`Erro ao entrar na família: ${err.message}`);
+    }
+  });
+
   // Autenticação Modal
   btnOpenAuth.addEventListener('click', () => {
     switchAuthTab('login');
@@ -599,7 +758,6 @@ function registerEventListeners() {
   tabRegister.addEventListener('click', () => switchAuthTab('register'));
   tabVerify.addEventListener('click', () => switchAuthTab('verify'));
 
-  // Form: Login
   formLogin.addEventListener('submit', async (e) => {
     e.preventDefault();
     const email = loginEmail.value.trim();
@@ -615,7 +773,6 @@ function registerEventListeners() {
     }
   });
 
-  // Form: Cadastro
   formRegister.addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = regName.value.trim();
@@ -623,7 +780,7 @@ function registerEventListeners() {
     const password = regPassword.value;
 
     try {
-      showToast('Cadastrando e enviando e-mail de confirmação...');
+      showToast('Cadastrando e enviando e-mail...');
       await signUpUser(name, email, password, myColor);
       verifyEmail.value = email;
       switchAuthTab('verify');
@@ -633,7 +790,6 @@ function registerEventListeners() {
     }
   });
 
-  // Form: Verificação de Token OTP
   formVerify.addEventListener('submit', async (e) => {
     e.preventDefault();
     const email = verifyEmail.value.trim();
@@ -649,46 +805,13 @@ function registerEventListeners() {
     }
   });
 
-  // Logout
   btnLogoutUser.addEventListener('click', async () => {
     await signOutUser();
     modalAuth.classList.add('hidden');
     showToast('Você saiu da sua conta.');
   });
 
-  // Modal: Trocar Círculo
-  btnChangeCircle.addEventListener('click', () => {
-    inputCircleCode.value = currentCircle;
-    inputCircleName.value = currentCircleName;
-    modalCircle.classList.remove('hidden');
-  });
-
-  btnCloseCircleModal.addEventListener('click', () => modalCircle.classList.add('hidden'));
-  btnCancelCircleModal.addEventListener('click', () => modalCircle.classList.add('hidden'));
-
-  btnConfirmCircleModal.addEventListener('click', async () => {
-    const newCode = inputCircleCode.value.trim().toUpperCase();
-    const newName = inputCircleName.value.trim() || 'Minha Família';
-
-    if (!newCode) {
-      alert('Informe um código para o círculo.');
-      return;
-    }
-
-    currentCircle = newCode;
-    currentCircleName = newName;
-    localStorage.setItem('sentinel_circle_code', newCode);
-    localStorage.setItem('sentinel_circle_name', newName);
-
-    updateCircleUI();
-    modalCircle.classList.add('hidden');
-
-    membersMap.clear();
-    await connectToSupabase();
-    showToast(`Entrou no círculo "${newCode}".`);
-  });
-
-  // Modal: Adicionar Lugar Seguro
+  // Modal Lugar Seguro
   btnAddPlaceModal.addEventListener('click', () => {
     modalPlace.classList.remove('hidden');
   });
@@ -716,7 +839,7 @@ function registerEventListeners() {
     }
   });
 
-  // Modal: Configurações do Supabase
+  // Modal Configurações
   btnOpenSettings.addEventListener('click', () => {
     const { url, key } = getStoredConfig();
     cfgSupabaseUrl.value = url;

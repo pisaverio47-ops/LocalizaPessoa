@@ -4,12 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Sentinel — Geolocalização em Tempo Real</title>
-  <meta name="description" content="Rastreamento familiar em tempo real com mapas, telemetria completa, lugares seguros e autenticação via Supabase." />
+  <meta name="description" content="Rastreamento familiar em tempo real estilo Life360 com criação de grupos, códigos de convite e telemetria completa." />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%230091ff'><circle cx='12' cy='12' r='10' stroke='%230091ff' stroke-width='2' fill='none'/><circle cx='12' cy='12' r='4' fill='%230091ff'/></svg>" />
 
   <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <!-- App Stylesheet -->
@@ -26,7 +26,9 @@
         </div>
         <div class="brand-text">
           <h1 class="brand-title">Sentinel</h1>
-          <span class="brand-badge" id="headerCircleBadge">Círculo: FAMILIA-01</span>
+          <button class="brand-badge-btn" id="headerCircleBadge" title="Clique para gerenciar suas famílias">
+            Família: FAMILIA-01 ▾
+          </button>
         </div>
       </div>
 
@@ -135,11 +137,11 @@
           </div>
         </section>
 
-        <!-- Circle Management Section -->
+        <!-- Family / Circle Management Section -->
         <section class="panel-section">
           <div class="section-title-row">
-            <h2 class="section-title">Círculo Atual</h2>
-            <button id="btnChangeCircle" class="btn-link">Trocar Círculo</button>
+            <h2 class="section-title">Família Ativa</h2>
+            <button id="btnChangeCircle" class="btn-link">Gerenciar / Trocar</button>
           </div>
           
           <div class="circle-card">
@@ -147,23 +149,28 @@
               <span class="circle-name" id="circleNameDisplay">Minha Família</span>
               <span class="circle-code-tag" id="circleCodeDisplay">FAMILIA-01</span>
             </div>
-            <button id="btnCopyCircleCode" class="btn btn-secondary btn-sm" title="Copiar código de convite">
-              Copiar Código
-            </button>
+            <div class="circle-actions-row">
+              <button id="btnCopyCircleCode" class="btn btn-secondary btn-sm" title="Copiar código de convite">
+                Copiar
+              </button>
+              <button id="btnShareWhatsApp" class="btn btn-whatsapp btn-sm" title="Enviar convite para amigo/familiar pelo WhatsApp">
+                WhatsApp
+              </button>
+            </div>
           </div>
         </section>
 
         <!-- Members Online Section -->
         <section class="panel-section flex-grow">
           <div class="section-title-row">
-            <h2 class="section-title">Membros no Mapa (<span id="memberCount">0</span>)</h2>
+            <h2 class="section-title">Membros desta Família (<span id="memberCount">0</span>)</h2>
             <button id="btnFitBounds" class="btn-link">Enquadrar Todos</button>
           </div>
 
           <div class="members-list" id="membersList">
             <div class="empty-state">
-              <p>Nenhum outro membro transmitindo neste círculo.</p>
-              <small>Abra o link em outro celular com o mesmo código para vê-lo no mapa.</small>
+              <p>Nenhum outro membro transmitindo nesta família.</p>
+              <small>Envie o código para outro familiar entrar e aparecer no mapa.</small>
             </div>
           </div>
         </section>
@@ -224,6 +231,52 @@
 
     </main>
 
+    <!-- Modal: Gestão de Famílias (Criar, Entrar com Código e Minhas Famílias) -->
+    <div id="modalCircle" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 class="modal-title">Gestão de Famílias & Grupos</h3>
+          <button class="modal-close" id="btnCloseCircleModal">&times;</button>
+        </div>
+
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="tabCreateFamily">Criar Família</button>
+          <button class="auth-tab" id="tabJoinFamily">Entrar com Código</button>
+          <button class="auth-tab" id="tabMyFamilies">Minhas Famílias</button>
+        </div>
+
+        <div class="modal-body">
+          <!-- Aba 1: Criar Nova Família -->
+          <div id="panelCreateFamily" class="family-tab-panel">
+            <p class="modal-desc">Crie um grupo familiar. Um código exclusivo será gerado para você convidar membros.</p>
+            <div class="form-group">
+              <label for="inputNewFamilyName">Nome da Família / Grupo:</label>
+              <input type="text" id="inputNewFamilyName" class="input-text" placeholder="Ex: Família Silva, Viagem com Amigos" />
+            </div>
+            <button class="btn btn-primary w-full" id="btnActionCreateFamily">Criar Família & Gerar Código</button>
+          </div>
+
+          <!-- Aba 2: Entrar com Código -->
+          <div id="panelJoinFamily" class="family-tab-panel hidden">
+            <p class="modal-desc">Recebeu um código de convite de alguém? Digite-o abaixo para começar a ver e ser visto no mapa.</p>
+            <div class="form-group">
+              <label for="inputCircleCode">Código de Convite da Família:</label>
+              <input type="text" id="inputCircleCode" class="input-text uppercase" placeholder="Ex: FAM-7892 ou FAMILIA-01" />
+            </div>
+            <button class="btn btn-primary w-full" id="btnActionJoinFamily">Entrar na Família</button>
+          </div>
+
+          <!-- Aba 3: Minhas Famílias -->
+          <div id="panelMyFamilies" class="family-tab-panel hidden">
+            <p class="modal-desc">Selecione uma das suas famílias para alternar o mapa:</p>
+            <div class="my-families-list" id="myFamiliesList">
+              <div class="empty-state"><p>Carregando suas famílias...</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal: Autenticação (Login, Cadastro e Token de E-mail) -->
     <div id="modalAuth" class="modal-overlay hidden">
       <div class="modal-card">
@@ -232,7 +285,6 @@
           <button class="modal-close" id="btnCloseAuthModal">&times;</button>
         </div>
         
-        <!-- Abas do Modal -->
         <div class="auth-tabs" id="authTabsContainer">
           <button class="auth-tab active" id="tabLogin">Entrar</button>
           <button class="auth-tab" id="tabRegister">Cadastrar</button>
@@ -290,31 +342,6 @@
             <p class="modal-desc">Você está conectado como <strong id="loggedUserDisplay"></strong>.</p>
             <button class="btn btn-danger w-full" id="btnLogoutUser">Sair da Conta (Logout)</button>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal: Trocar/Entrar Círculo -->
-    <div id="modalCircle" class="modal-overlay hidden">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 class="modal-title">Entrar ou Criar Círculo</h3>
-          <button class="modal-close" id="btnCloseCircleModal">&times;</button>
-        </div>
-        <div class="modal-body">
-          <p class="modal-desc">Digite o código da sua família ou grupo para compartilhar localização privada.</p>
-          <div class="form-group">
-            <label for="inputCircleCode">Código do Círculo:</label>
-            <input type="text" id="inputCircleCode" class="input-text uppercase" placeholder="Ex: FAMILIA-01" />
-          </div>
-          <div class="form-group">
-            <label for="inputCircleName">Nome do Círculo (opcional):</label>
-            <input type="text" id="inputCircleName" class="input-text" placeholder="Ex: Família Silva" />
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" id="btnCancelCircleModal">Cancelar</button>
-          <button class="btn btn-primary" id="btnConfirmCircleModal">Entrar no Círculo</button>
         </div>
       </div>
     </div>

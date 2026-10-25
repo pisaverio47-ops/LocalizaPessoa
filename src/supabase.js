@@ -51,9 +51,6 @@ export function getSupabase() {
 // AUTENTICAÇÃO COM SUPABASE AUTH (CADASTRO, LOGIN E TOKEN POR E-MAIL)
 // ==============================================================================
 
-/**
- * Cria uma nova conta e envia e-mail com token/link de confirmação
- */
 export async function signUpUser(name, email, password, avatarColor) {
   const client = getSupabase();
   if (!client) throw new Error('Cliente Supabase não inicializado.');
@@ -73,9 +70,6 @@ export async function signUpUser(name, email, password, avatarColor) {
   return data;
 }
 
-/**
- * Confirma o cadastro utilizando o token de 6 dígitos enviado por e-mail
- */
 export async function verifyEmailOtp(email, token) {
   const client = getSupabase();
   if (!client) throw new Error('Cliente Supabase não inicializado.');
@@ -90,9 +84,6 @@ export async function verifyEmailOtp(email, token) {
   return data;
 }
 
-/**
- * Realiza login com e-mail e senha
- */
 export async function signInUser(email, password) {
   const client = getSupabase();
   if (!client) throw new Error('Cliente Supabase não inicializado.');
@@ -106,18 +97,12 @@ export async function signInUser(email, password) {
   return data;
 }
 
-/**
- * Encerra a sessão
- */
 export async function signOutUser() {
   const client = getSupabase();
   if (!client) return;
   await client.auth.signOut();
 }
 
-/**
- * Retorna o usuário logado atual
- */
 export async function getCurrentUser() {
   const client = getSupabase();
   if (!client) return null;
@@ -125,9 +110,6 @@ export async function getCurrentUser() {
   return data?.user || null;
 }
 
-/**
- * Escuta mudanças de autenticação (Login, Logout)
- */
 export function onAuthStateChange(callback) {
   const client = getSupabase();
   if (!client) return () => {};
@@ -140,12 +122,116 @@ export function onAuthStateChange(callback) {
 }
 
 // ==============================================================================
-// LOCALIZAÇÃO EM TEMPO REAL E BANCO
+// GESTÃO DE FAMÍLIAS / CÍRCULOS (CRIAR, ENTRAR COM CÓDIGO E LISTAR)
 // ==============================================================================
 
 /**
- * Assina atualizações em tempo real das localizações de um círculo
+ * Cria uma nova família com código único
  */
+export async function createFamily(name, createdByUserId, userName, avatarColor) {
+  const client = getSupabase();
+  if (!client) throw new Error('Supabase não conectado.');
+
+  // Gerar código único e legível (ex: FAM-7492)
+  const randomNum = Math.floor(1000 + Math.random() * 9000);
+  const code = `FAM-${randomNum}`;
+
+  // 1. Inserir na tabela circles
+  const { data: circleData, error: circleErr } = await client
+    .from('circles')
+    .insert({
+      code,
+      name,
+      created_by: createdByUserId,
+    })
+    .select()
+    .single();
+
+  if (circleErr) throw circleErr;
+
+  // 2. Adicionar o criador na tabela circle_members como admin
+  await client.from('circle_members').insert({
+    circle_code: code,
+    user_id: createdByUserId,
+    user_name: userName,
+    avatar_color: avatarColor,
+    role: 'admin',
+  });
+
+  return circleData;
+}
+
+/**
+ * Entra em uma família existente utilizando o código de convite
+ */
+export async function joinFamilyByCode(circleCode, userId, userName, avatarColor) {
+  const client = getSupabase();
+  if (!client) throw new Error('Supabase não conectado.');
+
+  const formattedCode = circleCode.trim().toUpperCase();
+
+  // 1. Verificar se o círculo existe
+  const { data: circle, error: findErr } = await client
+    .from('circles')
+    .select('*')
+    .eq('code', formattedCode)
+    .single();
+
+  if (findErr || !circle) {
+    throw new Error(`Família com o código "${formattedCode}" não foi encontrada.`);
+  }
+
+  // 2. Inserir ou atualizar na tabela circle_members
+  const { error: memberErr } = await client
+    .from('circle_members')
+    .upsert({
+      circle_code: formattedCode,
+      user_id: userId,
+      user_name: userName,
+      avatar_color: avatarColor,
+      role: 'member',
+    }, {
+      onConflict: 'circle_code,user_id',
+    });
+
+  if (memberErr) {
+    console.warn('Aviso ao registrar membro:', memberErr.message);
+  }
+
+  return circle;
+}
+
+/**
+ * Busca todas as famílias em que o usuário participa
+ */
+export async function getUserFamilies(userId) {
+  const client = getSupabase();
+  if (!client || !userId) return [];
+
+  try {
+    const { data, error } = await client
+      .from('circle_members')
+      .select('circle_code, role, circles ( code, name )')
+      .eq('user_id', userId);
+
+    if (error) return [];
+    return data
+      .map((item) => ({
+        code: item.circle_code,
+        name: item.circles?.name || item.circle_code,
+        role: item.role,
+      }))
+      .filter((c) => c.code);
+  } catch (err) {
+    console.warn('Erro ao carregar famílias do usuário:', err);
+    return [];
+  }
+}
+
+// ==============================================================================
+// LOCALIZAÇÃO EM TEMPO REAL E BANCO
+// ==============================================================================
+
 export function subscribeCircleLocations(circleCode, onLocationUpdate) {
   const client = getSupabase();
   if (!client) return null;
@@ -154,7 +240,6 @@ export function subscribeCircleLocations(circleCode, onLocationUpdate) {
     client.removeChannel(activeChannel);
   }
 
-  // Canal Realtime para o círculo específico
   const channel = client.channel(`circle:${circleCode}`, {
     config: {
       broadcast: { self: false },
@@ -162,14 +247,14 @@ export function subscribeCircleLocations(circleCode, onLocationUpdate) {
     },
   });
 
-  // 1. Ouvir Broadcast P2P (instantâneo)
+  // 1. Broadcast P2P (ultra-rápido)
   channel.on('broadcast', { event: 'location_ping' }, (payload) => {
     if (payload.payload) {
       onLocationUpdate(payload.payload);
     }
   });
 
-  // 2. Ouvir mudanças no banco Postgres (INSERT / UPDATE)
+  // 2. Mudanças no banco Postgres (INSERT / UPDATE)
   channel.on(
     'postgres_changes',
     {
@@ -186,21 +271,17 @@ export function subscribeCircleLocations(circleCode, onLocationUpdate) {
   );
 
   channel.subscribe((status) => {
-    console.log(`[Supabase Realtime] Status do canal circle:${circleCode}:`, status);
+    console.log(`[Supabase Realtime] Canal circle:${circleCode}:`, status);
   });
 
   activeChannel = channel;
   return channel;
 }
 
-/**
- * Transmite a localização via broadcast instantâneo e persiste na tabela locations
- */
 export async function broadcastAndSaveLocation(locationData) {
   const client = getSupabase();
   if (!client) return;
 
-  // 1. Transmitir via WebSocket Broadcast para membros conectados
   if (activeChannel) {
     activeChannel.send({
       type: 'broadcast',
@@ -209,7 +290,6 @@ export async function broadcastAndSaveLocation(locationData) {
     }).catch((err) => console.warn('Erro no broadcast:', err));
   }
 
-  // 2. Persistir no banco de dados Supabase
   try {
     const { error } = await client
       .from('locations')
@@ -236,7 +316,6 @@ export async function broadcastAndSaveLocation(locationData) {
       console.warn('Aviso ao salvar localização no banco:', error.message);
     }
 
-    // 3. Salvar no histórico periodicamente (a cada 30 segundos)
     const lastHistorySave = parseInt(sessionStorage.getItem('last_history_save') || '0', 10);
     const now = Date.now();
     if (now - lastHistorySave > 30000) {
@@ -256,9 +335,6 @@ export async function broadcastAndSaveLocation(locationData) {
   }
 }
 
-/**
- * Busca todas as localizações ativas do círculo
- */
 export async function fetchCircleLocations(circleCode) {
   const client = getSupabase();
   if (!client) return [];
@@ -275,9 +351,6 @@ export async function fetchCircleLocations(circleCode) {
   return data || [];
 }
 
-/**
- * Busca os Lugares Seguros (Geofences)
- */
 export async function fetchPlaces(circleCode) {
   const client = getSupabase();
   if (!client) return [];
@@ -292,9 +365,6 @@ export async function fetchPlaces(circleCode) {
   return data || [];
 }
 
-/**
- * Adiciona um novo Lugar Seguro
- */
 export async function createPlace(circleCode, name, latitude, longitude, radiusMeters) {
   const client = getSupabase();
   if (!client) return null;
@@ -318,9 +388,6 @@ export async function createPlace(circleCode, name, latitude, longitude, radiusM
   return data;
 }
 
-/**
- * Envia um Alerta / SOS para o círculo
- */
 export async function triggerAlert(circleCode, userName, type, message, lat, lng) {
   const client = getSupabase();
   if (!client) return;

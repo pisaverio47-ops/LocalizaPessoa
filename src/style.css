@@ -26,6 +26,7 @@
   --signal-warning: #f59e0b;
   --signal-danger: #f43f5e;
   --signal-danger-glow: rgba(244, 63, 94, 0.3);
+  --signal-whatsapp: #25d366;
 
   /* Tipografia */
   --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -123,10 +124,22 @@ html, body {
   line-height: 1.2;
 }
 
-.brand-badge {
+.brand-badge-btn {
+  background: none;
+  border: none;
+  color: var(--signal-accent);
   font-size: 0.75rem;
-  color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.brand-badge-btn:hover {
+  text-decoration: underline;
 }
 
 .header-center {
@@ -211,6 +224,15 @@ html, body {
   background-color: #1e2b48;
 }
 
+.btn-whatsapp {
+  background-color: #128c7e;
+  color: #ffffff;
+}
+
+.btn-whatsapp:hover {
+  background-color: var(--signal-whatsapp);
+}
+
 .btn-transmit {
   background-color: var(--bg-panel-elevated);
   border-color: var(--border-medium);
@@ -269,7 +291,7 @@ html, body {
 }
 
 .btn-sm {
-  padding: 5px 12px;
+  padding: 5px 10px;
   font-size: 0.78rem;
 }
 
@@ -468,21 +490,21 @@ html, body {
   margin-top: 4px;
 }
 
-/* Card do Círculo */
+/* Card do Círculo / Família */
 .circle-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
   background-color: var(--bg-panel-elevated);
   border: 1px solid var(--border-subtle);
-  padding: 10px 14px;
+  padding: 12px 14px;
   border-radius: var(--radius-md);
 }
 
 .circle-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .circle-name {
@@ -493,13 +515,20 @@ html, body {
 
 .circle-code-tag {
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: 0.78rem;
   color: var(--signal-accent);
   background-color: rgba(0, 145, 255, 0.1);
   padding: 2px 6px;
   border-radius: 4px;
   display: inline-block;
   width: fit-content;
+  font-weight: 600;
+}
+
+.circle-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* Lista de Membros */
@@ -592,6 +621,38 @@ html, body {
 .member-time {
   font-size: 0.68rem;
   color: var(--text-tertiary);
+}
+
+/* Lista Minhas Famílias no Modal */
+.my-families-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.family-select-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.family-select-item:hover, .family-select-item.active {
+  border-color: var(--border-focus);
+  background-color: var(--bg-panel-elevated);
+}
+
+.family-select-code {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--signal-accent);
 }
 
 /* Estado Vazio */
@@ -738,7 +799,7 @@ html, body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Modais e Abas de Autenticação */
+/* Modais e Abas */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -811,6 +872,11 @@ html, body {
   background-color: var(--bg-panel-elevated);
   color: var(--signal-accent);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.family-tab-panel {
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-desc {
